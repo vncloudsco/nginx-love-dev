@@ -25,18 +25,111 @@ cd "$PROJECT_DIR"
 
 # Check prerequisites
 echo -e "${BLUE}📋 Checking prerequisites...${NC}"
+
+# Detect OS
+OS="$(uname -s)"
+case "${OS}" in
+    Linux*)     PLATFORM=Linux;;
+    Darwin*)    PLATFORM=Mac;;
+    *)          PLATFORM="UNKNOWN"
+esac
+
+# Check Node.js
+if ! command -v node &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Node.js not found. Installing Node.js 20.x...${NC}"
+
+    if [ "$PLATFORM" = "Linux" ]; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - > /dev/null 2>&1
+        sudo apt-get install -y nodejs > /dev/null 2>&1 || {
+            echo "❌ Failed to install Node.js. Please install manually from: https://nodejs.org/"
+            exit 1
+        }
+    elif [ "$PLATFORM" = "Mac" ]; then
+        if command -v brew &> /dev/null; then
+            brew install node@20 > /dev/null 2>&1
+        else
+            echo "❌ Homebrew not found. Please install Node.js 18+ from: https://nodejs.org/"
+            exit 1
+        fi
+    else
+        echo "❌ Unsupported OS. Please install Node.js 18+ from: https://nodejs.org/"
+        exit 1
+    fi
+    echo "✅ Node.js $(node -v) installed successfully"
+else
+    NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+    if [ "$NODE_VERSION" -lt 18 ]; then
+        echo -e "${YELLOW}⚠️  Node.js version too old: $(node -v). Upgrading to 20.x...${NC}"
+
+        if [ "$PLATFORM" = "Linux" ]; then
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - > /dev/null 2>&1
+            sudo apt-get install -y nodejs > /dev/null 2>&1
+        elif [ "$PLATFORM" = "Mac" ]; then
+            brew upgrade node > /dev/null 2>&1 || brew install node@20 > /dev/null 2>&1
+        fi
+        echo "✅ Node.js upgraded to $(node -v)"
+    else
+        echo "✅ Node.js $(node -v) detected"
+    fi
+fi
+
+# Check pnpm
 if ! command -v pnpm &> /dev/null; then
-    echo "Installing pnpm..."
-    npm install -g pnpm
+    echo -e "${YELLOW}⚠️  pnpm not found. Installing...${NC}"
+    npm install -g pnpm > /dev/null 2>&1
+    echo "✅ pnpm $(pnpm -v) installed"
+else
+    echo "✅ pnpm $(pnpm -v) detected"
 fi
 
-if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker and Docker Compose are required!"
-    echo "Please install Docker Desktop: https://www.docker.com/products/docker-desktop"
-    exit 1
+# Check Docker
+if ! command -v docker &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Docker not found. Installing Docker...${NC}"
+
+    if [ "$PLATFORM" = "Linux" ]; then
+        curl -fsSL https://get.docker.com -o /tmp/install-docker.sh
+        sudo sh /tmp/install-docker.sh > /dev/null 2>&1
+        rm -f /tmp/install-docker.sh
+        sudo systemctl start docker
+        sudo systemctl enable docker
+        sudo usermod -aG docker $USER
+        echo "✅ Docker installed. You may need to log out and back in for group permissions."
+    elif [ "$PLATFORM" = "Mac" ]; then
+        echo "❌ Please install Docker Desktop manually: https://www.docker.com/products/docker-desktop"
+        exit 1
+    fi
 fi
 
-echo "✅ Prerequisites OK"
+# Check if Docker daemon is running
+if ! docker info &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Docker daemon not running. Starting Docker...${NC}"
+    if [ "$PLATFORM" = "Linux" ]; then
+        sudo systemctl start docker
+        sleep 2
+    else
+        echo "❌ Please start Docker Desktop"
+        exit 1
+    fi
+fi
+echo "✅ Docker $(docker -v | cut -d',' -f1 | cut -d' ' -f3) detected"
+
+# Check Docker Compose
+if ! command -v docker-compose &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Docker Compose not found. Installing...${NC}"
+
+    COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+    if [ -z "$COMPOSE_VERSION" ]; then
+        COMPOSE_VERSION="v2.24.0"
+    fi
+
+    sudo curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" \
+        -o /usr/local/bin/docker-compose > /dev/null 2>&1
+    sudo chmod +x /usr/local/bin/docker-compose
+    echo "✅ Docker Compose $(docker-compose -v | cut -d' ' -f4 | tr -d ',') installed"
+else
+    echo "✅ Docker Compose $(docker-compose -v | cut -d' ' -f4 | tr -d ',') detected"
+fi
+
 echo ""
 
 # Install dependencies
