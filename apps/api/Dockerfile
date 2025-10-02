@@ -27,24 +27,38 @@ RUN cd apps/api && pnpm prisma:generate
 RUN pnpm --filter @nginx-love/api build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-slim
+
+# Install OpenSSL and wget for Prisma and health checks
+RUN apt-get update && apt-get install -y openssl wget && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
 WORKDIR /app
 
-# Copy only necessary files
-COPY --from=builder /app/apps/api/dist ./dist
-COPY --from=builder /app/apps/api/package.json ./
-COPY --from=builder /app/apps/api/node_modules ./node_modules
-COPY --from=builder /app/apps/api/prisma ./prisma
+# Copy workspace and package files
+COPY --from=builder /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
+COPY --from=builder /app/apps/api/package.json ./apps/api/
 
-# Expose port 3000
-EXPOSE 3000
+# Copy built files and prisma
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+# Install all dependencies (needed for Prisma CLI and native modules)
+RUN pnpm install --frozen-lockfile --filter @nginx-love/api
+
+# Generate Prisma client
+RUN cd apps/api && pnpm prisma:generate
+
+WORKDIR /app/apps/api
+
+# Expose port 3001
+EXPOSE 3001
+
+# Health check (using root endpoint)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/ || exit 1
 
 CMD ["node", "dist/index.js"]

@@ -34,36 +34,59 @@ pnpm install
 ### 2. Setup Environment Files
 
 ```bash
-# Docker Compose (database)
+# Docker Compose (database + API)
 cp .env.example .env
 
 # Frontend
 cp apps/web/.env.example apps/web/.env
-
-# Backend
-cp apps/api/.env.example apps/api/.env
 ```
 
-### 3. Start Database
+**Important**: Update `.env` with secure secrets before deploying to production.
+
+### 3. Start Services with Docker
 
 ```bash
+# Start database and API in containers
 docker-compose up -d
+
+# View logs
+docker-compose logs -f api
 ```
 
-### 4. Setup Database
+### 4. Setup Database (First time only)
 
 ```bash
+# Run migrations inside the API container
+docker-compose exec api pnpm prisma:migrate
+docker-compose exec api pnpm prisma:seed
+```
+
+### 5. Run Frontend
+
+```bash
+# Start frontend (connects to API on http://localhost:3001)
+pnpm --filter @nginx-love/web dev    # http://localhost:5173
+```
+
+## 🔧 Alternative: Local Development (without Docker)
+
+If you prefer running API locally instead of in Docker:
+
+```bash
+# 1. Start only database
+docker-compose up -d db
+
+# 2. Copy backend env file
+cp apps/api/.env.example apps/api/.env
+
+# 3. Setup database (from apps/api/)
 cd apps/api
 pnpm prisma:generate
 pnpm prisma:migrate
 pnpm prisma:seed
 cd ../..
-```
 
-### 5. Run Development
-
-```bash
-# Start all apps
+# 4. Run all apps locally
 pnpm dev
 
 # Or run individually
@@ -95,9 +118,11 @@ pnpm prisma:seed      # Seed database
 pnpm prisma:studio    # Open Prisma Studio
 
 # Docker
-docker-compose up -d      # Start database
-docker-compose logs -f db # View logs
-docker-compose down       # Stop database
+docker-compose up -d           # Start database + API
+docker-compose up -d db        # Start only database
+docker-compose logs -f api     # View API logs
+docker-compose exec api pnpm prisma:migrate  # Run migrations
+docker-compose down            # Stop all services
 ```
 
 ## 📁 Project Structure
