@@ -92,10 +92,19 @@ const collectMetricsFromLogs = async (domain?: string, minutes: number = 60): Pr
 
     // Read logs for each domain
     for (const domainName of domains) {
-      const logFile = path.join(logDir, `${domainName}_access.log`);
+      // Try SSL log file first, then fall back to HTTP log file
+      const sslLogFile = path.join(logDir, `${domainName}_ssl_access.log`);
+      const httpLogFile = path.join(logDir, `${domainName}_access.log`);
       
-      if (!fs.existsSync(logFile)) {
-        logger.warn(`Log file not found: ${logFile}`);
+      let logFile: string | null = null;
+      if (fs.existsSync(sslLogFile)) {
+        logFile = sslLogFile;
+      } else if (fs.existsSync(httpLogFile)) {
+        logFile = httpLogFile;
+      }
+      
+      if (!logFile) {
+        logger.warn(`Log file not found for domain: ${domainName}`);
         continue;
       }
 

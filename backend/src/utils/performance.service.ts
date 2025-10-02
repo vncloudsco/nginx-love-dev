@@ -70,6 +70,7 @@ function parseNginxLogLine(line: string): NginxLogEntry | null {
 
 /**
  * Get all domain access log files
+ * Priority: SSL log files (_ssl_access.log) over HTTP log files (_access.log)
  */
 async function getDomainLogFiles(): Promise<Map<string, string>> {
   const logDir = '/var/log/nginx';
@@ -77,12 +78,25 @@ async function getDomainLogFiles(): Promise<Map<string, string>> {
 
   try {
     const files = fs.readdirSync(logDir);
+    
+    // First pass: collect all SSL access logs
     for (const file of files) {
-      // Match files like: domain.com_access.log
-      const match = file.match(/^(.+)_access\.log$/);
-      if (match) {
-        const domain = match[1];
+      const sslMatch = file.match(/^(.+)_ssl_access\.log$/);
+      if (sslMatch) {
+        const domain = sslMatch[1];
         domainLogs.set(domain, path.join(logDir, file));
+      }
+    }
+    
+    // Second pass: collect HTTP access logs (only if SSL log doesn't exist)
+    for (const file of files) {
+      const httpMatch = file.match(/^(.+)_access\.log$/);
+      if (httpMatch) {
+        const domain = httpMatch[1];
+        // Only add if not already added (SSL has priority)
+        if (!domainLogs.has(domain)) {
+          domainLogs.set(domain, path.join(logDir, file));
+        }
       }
     }
   } catch (error) {
