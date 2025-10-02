@@ -1,6 +1,19 @@
-# 🚀 Nginx WAF - Admin Portal
+# 🚀 Nginx WAF - Advanced Nginx Management Platform
 
-Modern admin portal for managing Nginx and ModSecurity WAF.
+Comprehensive Nginx management system with ModSecurity WAF, Domain Management, SSL Certificates and Real-time Monitoring.
+
+## ✨ Key Features
+
+- 🔒 **ModSecurity WAF** - OWASP Core Rule Set (CRS) + Custom Rules
+- 🌐 **Domain Management** - Load balancing, upstream monitoring, HTTPS backend support
+- 🔐 **SSL Certificate Management** - Auto Let's Encrypt + Manual upload
+- 👥 **Multi-user Management** - Role-based access control (Admin/Moderator/Viewer)
+- 📊 **Real-time Monitoring** - Performance metrics, alerts, system health
+- 🛡️ **Access Control Lists (ACL)** - IP whitelist/blacklist, GeoIP, User-Agent filtering
+- 📋 **Activity Logging** - Comprehensive audit trail
+- 🔔 **Smart Alerts** - Email/Telegram notifications with custom conditions
+- 💾 **Database Management** - PostgreSQL with Prisma ORM
+- 🎨 **Modern UI** - React + TypeScript + ShadCN UI + Tailwind CSS
 
 ## 📋 Prerequisites
 
@@ -107,3 +120,26 @@ nginx-love/
 ## 📄 License
 
 Apache 2.0 License. See [LICENSE](./LICENSE) for details.
+
+## 👥 Support & Community
+
+### Getting Help
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/TinyActive/nginx-love/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/TinyActive/nginx-love/discussions)
+- 📚 **Documentation**: [Project Wiki](https://github.com/TinyActive/nginx-love/wiki)
+- 💬 **Community**: [Discord Server](#) (coming soon)
+
+### Security Issues
+For security vulnerabilities, please email: security@tinyactive.net
+
+### Acknowledgments
+- [OWASP ModSecurity Core Rule Set](https://owasp.org/www-project-modsecurity-core-rule-set/)
+- [Nginx](https://nginx.org/) & [ModSecurity](https://modsecurity.org/)
+- [React](https://reactjs.org/) & [ShadCN UI](https://ui.shadcn.com/)
+- [Prisma](https://www.prisma.io/) & [PostgreSQL](https://www.postgresql.org/)
+
+---
+
+**🔥 Made with ❤️ by TinyActive Team**
+
+⭐ **Star this repository if it helped you!**
