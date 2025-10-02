@@ -1,0 +1,464 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  moderator
+  viewer
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+}
+
+enum ActivityType {
+  login
+  logout
+  config_change
+  user_action
+  security
+}
+
+model User {
+  id            String        @id @default(cuid())
+  username      String        @unique
+  email         String        @unique
+  password      String
+  fullName      String
+  role          UserRole      @default(viewer)
+  status        UserStatus    @default(active)
+  avatar        String?
+  phone         String?
+  timezone      String        @default("Asia/Ho_Chi_Minh")
+  language      String        @default("en")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  lastLogin     DateTime?
+  
+  // Relations
+  profile       UserProfile?
+  twoFactor     TwoFactorAuth?
+  activities    ActivityLog[]
+  refreshTokens RefreshToken[]
+  sessions      UserSession[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Additional profile fields can be added here
+  bio       String?
+  location  String?
+  website   String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_profiles")
+}
+
+model TwoFactorAuth {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  enabled       Boolean  @default(false)
+  method        String   @default("totp") // totp, sms
+  secret        String?
+  backupCodes   String[] // Encrypted backup codes
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("two_factor_auth")
+}
+
+model ActivityLog {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  action      String
+  type        ActivityType
+  ip          String
+  userAgent   String       @db.Text
+  details     String?      @db.Text
+  success     Boolean      @default(true)
+  
+  timestamp   DateTime     @default(now())
+
+  @@index([userId, timestamp])
+  @@index([type, timestamp])
+  @@map("activity_logs")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model UserSession {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  sessionId   String    @unique
+  ip          String
+  userAgent   String    @db.Text
+  device      String?
+  location    String?
+  
+  lastActive  DateTime  @default(now())
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([sessionId])
+  @@map("user_sessions")
+}
+
+// Domain Management Models
+
+enum DomainStatus {
+  active
+  inactive
+  error
+}
+
+enum UpstreamStatus {
+  up
+  down
+  checking
+}
+
+enum LoadBalancerAlgorithm {
+  round_robin
+  least_conn
+  ip_hash
+}
+
+enum SSLStatus {
+  valid
+  expiring
+  expired
+}
+
+model Domain {
+  id              String            @id @default(cuid())
+  name            String            @unique
+  status          DomainStatus      @default(inactive)
+  sslEnabled      Boolean           @default(false)
+  sslExpiry       DateTime?
+  modsecEnabled   Boolean           @default(true)
+  
+  // Relations
+  upstreams       Upstream[]
+  loadBalancer    LoadBalancerConfig?
+  sslCertificate  SSLCertificate?
+  modsecCRSRules  ModSecCRSRule[]
+  modsecRules     ModSecRule[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([name])
+  @@index([status])
+  @@map("domains")
+}
+
+model Upstream {
+  id          String          @id @default(cuid())
+  domainId    String
+  domain      Domain          @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  
+  host        String
+  port        Int
+  protocol    String          @default("http") // http or https
+  sslVerify   Boolean         @default(true)   // proxy_ssl_verify on/off
+  weight      Int             @default(1)
+  maxFails    Int             @default(3)
+  failTimeout Int             @default(10) // seconds
+  status      UpstreamStatus  @default(checking)
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([domainId])
+  @@map("upstreams")
+}
+
+model LoadBalancerConfig {
+  id                    String                  @id @default(cuid())
+  domainId              String                  @unique
+  domain                Domain                  @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  
+  algorithm             LoadBalancerAlgorithm   @default(round_robin)
+  healthCheckEnabled    Boolean                 @default(true)
+  healthCheckInterval   Int                     @default(30) // seconds
+  healthCheckTimeout    Int                     @default(5)  // seconds
+  healthCheckPath       String                  @default("/")
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@map("load_balancer_configs")
+}
+
+model SSLCertificate {
+  id          String      @id @default(cuid())
+  domainId    String      @unique
+  domain      Domain      @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  
+  commonName  String
+  sans        String[]    // Subject Alternative Names
+  issuer      String
+  certificate String      @db.Text // PEM format
+  privateKey  String      @db.Text // PEM format
+  chain       String?     @db.Text // PEM format
+  
+  validFrom   DateTime
+  validTo     DateTime
+  autoRenew   Boolean     @default(true)
+  status      SSLStatus   @default(valid)
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([domainId])
+  @@index([validTo])
+  @@map("ssl_certificates")
+}
+
+// ModSecurity CRS Rules (OWASP Core Rule Set)
+// Only stores metadata and enabled status
+// Actual rules come from CRS files
+model ModSecCRSRule {
+  id          String   @id @default(cuid())
+  domainId    String?
+  domain      Domain?  @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  
+  ruleFile    String   // e.g., "REQUEST-942-APPLICATION-ATTACK-SQLI.conf"
+  name        String
+  category    String
+  description String?  @db.Text
+  enabled     Boolean  @default(true)
+  paranoia    Int      @default(1) // Paranoia level 1-4
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([ruleFile, domainId])
+  @@index([domainId])
+  @@index([category])
+  @@map("modsec_crs_rules")
+}
+
+// ModSecurity Custom Rules (kept from original, renamed table)
+// Stores full rule content for user-defined rules
+model ModSecRule {
+  id          String   @id @default(cuid())
+  domainId    String?
+  domain      Domain?  @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  
+  name        String
+  category    String
+  ruleContent String   @db.Text
+  enabled     Boolean  @default(true)
+  description String?  @db.Text
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([domainId])
+  @@index([category])
+  @@map("modsec_rules")
+}
+
+model NginxConfig {
+  id          String   @id @default(cuid())
+  configType  String   // main, site, upstream, etc.
+  name        String
+  content     String   @db.Text
+  enabled     Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([configType])
+  @@map("nginx_configs")
+}
+
+model InstallationStatus {
+  id          String   @id @default(cuid())
+  component   String   @unique // nginx, modsecurity, etc.
+  status      String   // pending, running, completed, failed
+  step        String?
+  message     String?  @db.Text
+  progress    Int      @default(0) // 0-100
+  
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime @updatedAt
+
+  @@map("installation_status")
+}
+
+enum NotificationChannelType {
+  email
+  telegram
+}
+
+enum AlertSeverity {
+  critical
+  warning
+  info
+}
+
+model NotificationChannel {
+  id        String                   @id @default(cuid())
+  name      String
+  type      NotificationChannelType
+  enabled   Boolean                  @default(true)
+  config    Json                     // { email?, chatId?, botToken? }
+  
+  alertRules AlertRuleChannel[]
+  
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  @@map("notification_channels")
+}
+
+model AlertRule {
+  id        String            @id @default(cuid())
+  name      String
+  condition     String            // cpu > threshold, upstream_status == down, etc.
+  threshold     Int
+  severity      AlertSeverity
+  enabled       Boolean           @default(true)
+  checkInterval Int               @default(60)  // Check interval in seconds (default: 60s)
+  
+  channels      AlertRuleChannel[]
+  
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@map("alert_rules")
+}
+
+model AlertRuleChannel {
+  id        String              @id @default(cuid())
+  ruleId    String
+  channelId String
+  
+  rule      AlertRule           @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime            @default(now())
+
+  @@unique([ruleId, channelId])
+  @@index([ruleId])
+  @@index([channelId])
+  @@map("alert_rule_channels")
+}
+
+model AlertHistory {
+  id            String        @id @default(cuid())
+  severity      AlertSeverity
+  message       String        @db.Text
+  source        String
+  acknowledged  Boolean       @default(false)
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  
+  timestamp     DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+
+  @@index([severity])
+  @@index([acknowledged])
+  @@index([timestamp])
+  @@map("alert_history")
+}
+
+enum AclType {
+  whitelist
+  blacklist
+}
+
+enum AclField {
+  ip
+  geoip
+  user_agent
+  url
+  method
+  header
+}
+
+enum AclOperator {
+  equals
+  contains
+  regex
+}
+
+enum AclAction {
+  allow
+  deny
+  challenge
+}
+
+model AclRule {
+  id                String      @id @default(cuid())
+  name              String
+  type              AclType
+  conditionField    AclField
+  conditionOperator AclOperator
+  conditionValue    String
+  action            AclAction
+  enabled           Boolean     @default(true)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@map("acl_rules")
+}
+
+model PerformanceMetric {
+  id            String   @id @default(cuid())
+  domain        String
+  timestamp     DateTime @default(now())
+  responseTime  Float
+  throughput    Float
+  errorRate     Float
+  requestCount  Int
+  
+  createdAt     DateTime @default(now())
+
+  @@map("performance_metrics")
+  @@index([domain, timestamp])
+  @@index([timestamp])
+}
