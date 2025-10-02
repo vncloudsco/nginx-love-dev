@@ -1,6 +1,8 @@
-# 🚀 Nginx Love - Advanced Nginx Management Platform
+# 🚀 Nginx WAF - Advanced Nginx Management Platform
 
 Comprehensive Nginx management system with ModSecurity WAF, Domain Management, SSL Certificates and Real-time Monitoring.
+
+Recommendations: The software is developed by AI so it cannot guarantee absolute safety so please protect Port Protal and API with firewall for safety if any problem is detected please notify us and we will handle it.
 
 ## ✨ Key Features
 
@@ -36,7 +38,7 @@ sudo ./deploy.sh
 ```
 
 **Minimum Requirements:**
-- Ubuntu/Debian server (20.04+ recommended)
+- Ubuntu/Debian server (22.04+ recommended)
 - Root access
 - RAM: 2GB+ (4GB+ recommended)
 - Storage: 10GB+ free space
