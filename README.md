@@ -2,6 +2,8 @@
 
 Comprehensive Nginx management system with ModSecurity WAF, Domain Management, SSL Certificates and Real-time Monitoring.
 
+Recommendations: The software is developed by AI so it cannot guarantee absolute safety so please protect Port Protal and API with firewall for safety if any problem is detected please notify us and we will handle it.
+
 ## ✨ Key Features
 
 - 🔒 **ModSecurity WAF** - OWASP Core Rule Set (CRS) + Custom Rules
