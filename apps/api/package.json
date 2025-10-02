@@ -1,5 +1,5 @@
 {
-  "name": "nginx-waf-backend",
+  "name": "@nginx-love/api",
   "version": "1.0.0",
   "description": "Backend API for Nginx + ModSecurity Admin Portal",
   "main": "dist/index.js",
@@ -7,6 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "clean": "rm -rf dist node_modules",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",

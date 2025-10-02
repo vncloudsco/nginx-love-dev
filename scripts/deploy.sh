@@ -16,9 +16,10 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Configuration
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$PROJECT_DIR/backend"
-FRONTEND_DIR="$PROJECT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+BACKEND_DIR="$PROJECT_DIR/apps/api"
+FRONTEND_DIR="$PROJECT_DIR/apps/web"
 LOG_FILE="/var/log/nginx-love-ui-deploy.log"
 
 # Database configuration
@@ -83,13 +84,13 @@ else
     fi
 fi
 
-# Check npm (ensure it's installed)
-if ! command -v npm &> /dev/null; then
-    warn "npm not found. Installing npm..."
-    apt-get install -y npm >> "$LOG_FILE" 2>&1 || error "Failed to install npm"
-    log "✓ npm $(npm -v) installed successfully"
+# Check pnpm (ensure it's installed)
+if ! command -v pnpm &> /dev/null; then
+    warn "pnpm not found. Installing pnpm..."
+    npm install -g pnpm >> "$LOG_FILE" 2>&1 || error "Failed to install pnpm"
+    log "✓ pnpm $(pnpm -v) installed successfully"
 else
-    log "✓ npm $(npm -v) detected"
+    log "✓ pnpm $(pnpm -v) detected"
 fi
 
 # Check Docker
@@ -135,14 +136,8 @@ else
     log "✓ Docker Compose $(docker-compose -v | cut -d' ' -f4 | tr -d ',') detected"
 fi
 
-# Check npm/yarn/bun
-if command -v bun &> /dev/null; then
-    PKG_MANAGER="bun"
-elif command -v npm &> /dev/null; then
-    PKG_MANAGER="npm"
-else
-    error "No package manager found. Please install npm or bun."
-fi
+# Use pnpm as package manager
+PKG_MANAGER="pnpm"
 log "✓ Package manager: $PKG_MANAGER"
 
 # Step 2: Setup PostgreSQL with Docker

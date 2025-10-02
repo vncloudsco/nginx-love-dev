@@ -54,14 +54,14 @@ if [ "$USE_DOCKER" = true ]; then
     
     DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?schema=public"
 else
-    echo "📋 Please ensure PostgreSQL is running and update DATABASE_URL in backend/.env"
+    echo "📋 Please ensure PostgreSQL is running and update DATABASE_URL in apps/api/.env"
     DATABASE_URL=${DATABASE_URL:-"postgresql://user:password@localhost:5432/nginx_love_db?schema=public"}
 fi
 
 # Check if .env exists
-if [ ! -f "backend/.env" ]; then
+if [ ! -f "apps/api/.env" ]; then
     echo "⚠️  .env not found. Creating..."
-    cat > backend/.env <<EOF
+    cat > apps/api/.env <<EOF
 # Database Configuration
 DATABASE_URL="$DATABASE_URL"
 
@@ -89,35 +89,43 @@ TWO_FACTOR_APP_NAME="Nginx Love UI - Dev"
 SSL_DIR="/etc/nginx/ssl"
 ACME_DIR="/var/www/html/.well-known/acme-challenge"
 EOF
-    echo "✅ Created backend/.env"
+    echo "✅ Created apps/api/.env"
 fi
 
+# Get project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_DIR"
+
 # Install dependencies
-echo "📦 Installing dependencies..."
-cd backend && npm install && cd ..
-npm install
+echo "📦 Installing dependencies with pnpm..."
+if ! command -v pnpm &> /dev/null; then
+    echo "Installing pnpm..."
+    npm install -g pnpm
+fi
+pnpm install
 
 # Setup database
 echo "🗄️  Setting up database..."
-cd backend
-npx prisma generate
-npx prisma migrate deploy
-npx prisma db seed 2>/dev/null || echo "Database already seeded"
-cd ..
+cd apps/api
+pnpm prisma:generate
+pnpm exec prisma migrate deploy
+pnpm prisma:seed 2>/dev/null || echo "Database already seeded"
+cd "$PROJECT_DIR"
 
 # Start services
 echo "🎯 Starting services..."
 echo ""
 
 # Start backend in background
-cd backend && npm run dev > /tmp/backend.log 2>&1 &
+cd apps/api && pnpm dev > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 echo "✅ Backend started (PID: $BACKEND_PID) - http://localhost:3001"
 
 # Start frontend in background
-npm run dev > /tmp/frontend.log 2>&1 &
+cd "$PROJECT_DIR/apps/web" && pnpm dev > /tmp/frontend.log 2>&1 &
 FRONTEND_PID=$!
-echo "✅ Frontend started (PID: $FRONTEND_PID) - http://localhost:8080"
+echo "✅ Frontend started (PID: $FRONTEND_PID) - http://localhost:5173"
 
 echo ""
 echo "================================"
@@ -125,7 +133,7 @@ echo "✨ Quick Start Completed!"
 echo "================================"
 echo ""
 echo "🌐 Access:"
-echo "   Frontend: http://localhost:8080"
+echo "   Frontend: http://localhost:5173"
 echo "   Backend:  http://localhost:3001"
 echo ""
 echo "🔐 Login:"

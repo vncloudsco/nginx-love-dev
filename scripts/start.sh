@@ -13,22 +13,30 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check if backend directory exists
-if [ ! -d "backend" ]; then
-    echo "❌ Backend directory not found!"
+# Get project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_DIR"
+
+# Check if apps directory exists
+if [ ! -d "apps/api" ]; then
+    echo "❌ API directory not found!"
     exit 1
 fi
 
-echo -e "${BLUE}📦 Installing dependencies...${NC}"
-cd backend && npm install
-cd ..
+echo -e "${BLUE}📦 Installing dependencies with pnpm...${NC}"
+if ! command -v pnpm &> /dev/null; then
+    echo "Installing pnpm..."
+    npm install -g pnpm
+fi
+pnpm install
 
 echo ""
 echo -e "${BLUE}🗄️  Setting up database...${NC}"
-cd backend
-npx prisma generate
-npx prisma migrate deploy
-npm run prisma:seed
+cd apps/api
+pnpm prisma:generate
+pnpm exec prisma migrate deploy
+pnpm prisma:seed
 
 echo ""
 echo -e "${GREEN}✅ Setup complete!${NC}"
@@ -54,15 +62,15 @@ echo "🚀 Starting services..."
 echo "================================================"
 echo ""
 echo -e "${YELLOW}Starting backend on port 3001...${NC}"
-cd backend
-npm run dev &
+cd "$PROJECT_DIR/apps/api"
+pnpm dev &
 BACKEND_PID=$!
 
 sleep 3
 
-cd ..
-echo -e "${YELLOW}Starting frontend on port 8080...${NC}"
-npm run dev &
+cd "$PROJECT_DIR/apps/web"
+echo -e "${YELLOW}Starting frontend on port 5173...${NC}"
+pnpm dev &
 FRONTEND_PID=$!
 
 echo ""
@@ -71,7 +79,7 @@ echo -e "${GREEN}✅ All services started!${NC}"
 echo "================================================"
 echo ""
 echo "Backend:  http://localhost:3001"
-echo "Frontend: http://localhost:8080"
+echo "Frontend: http://localhost:5173"
 echo ""
 echo "Press Ctrl+C to stop all services"
 echo ""
