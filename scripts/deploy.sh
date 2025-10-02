@@ -23,9 +23,8 @@ FRONTEND_DIR="$PROJECT_DIR/apps/web"
 LOG_FILE="/var/log/nginx-love-ui-deploy.log"
 
 # Database configuration
-DB_CONTAINER_NAME="nginx-love-postgres"
-DB_NAME="nginx_love_db"
-DB_USER="nginx_love_user"
+DB_NAME="nginx_waf"
+DB_USER="postgres"
 DB_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
 DB_PORT=5432
 JWT_ACCESS_SECRET=$(openssl rand -base64 64 | tr -d "=+/" | cut -c1-64)
@@ -140,46 +139,47 @@ fi
 PKG_MANAGER="pnpm"
 log "✓ Package manager: $PKG_MANAGER"
 
-# Step 2: Setup PostgreSQL with Docker
-log "Step 2/8: Setting up PostgreSQL with Docker..."
+# Step 2: Setup Docker Services
+log "Step 2/8: Setting up Docker services..."
 
-# Stop and remove existing container if exists
-if docker ps -a | grep -q $DB_CONTAINER_NAME; then
-    log "Removing existing PostgreSQL container..."
-    docker stop $DB_CONTAINER_NAME 2>/dev/null || true
-    docker rm $DB_CONTAINER_NAME 2>/dev/null || true
-fi
+cd "$PROJECT_DIR"
 
-# Remove old volume to ensure clean installation
-if docker volume ls | grep -q nginx-love-postgres-data; then
-    log "Removing old PostgreSQL volume for clean installation..."
-    docker volume rm nginx-love-postgres-data 2>/dev/null || true
-fi
+# Create/Update root .env file for docker-compose
+log "Configuring docker-compose environment..."
+cat > .env <<EOF
+# Database Configuration (for Docker Compose)
+POSTGRES_DB=$DB_NAME
+POSTGRES_USER=$DB_USER
+POSTGRES_PASSWORD=$DB_PASSWORD
+DB_PORT=$DB_PORT
 
-# Create Docker network if not exists
-if ! docker network ls | grep -q nginx-love-network; then
-    docker network create nginx-love-network >> "$LOG_FILE" 2>&1
-    log "✓ Docker network created"
-fi
+# API Configuration
+API_PORT=3001
+JWT_ACCESS_SECRET=$JWT_ACCESS_SECRET
+JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+CORS_ORIGIN=http://$PUBLIC_IP:8080,http://localhost:8080,http://$PUBLIC_IP,http://localhost
+BCRYPT_ROUNDS=10
+SESSION_SECRET=$SESSION_SECRET
+TWO_FACTOR_APP_NAME=Nginx Love UI
+EOF
 
-# Start PostgreSQL container
-log "Starting PostgreSQL container..."
-docker run -d \
-    --name $DB_CONTAINER_NAME \
-    --network nginx-love-network \
-    -e POSTGRES_DB=$DB_NAME \
-    -e POSTGRES_USER=$DB_USER \
-    -e POSTGRES_PASSWORD=$DB_PASSWORD \
-    -p 127.0.0.1:$DB_PORT:5432 \
-    -v nginx-love-postgres-data:/var/lib/postgresql/data \
-    --restart unless-stopped \
-    postgres:15-alpine >> "$LOG_FILE" 2>&1 || error "Failed to start PostgreSQL container"
+log "✓ Docker environment configured"
+
+# Stop existing containers
+log "Stopping existing containers..."
+docker-compose down 2>/dev/null || true
+
+# Build and start services
+log "Building and starting Docker services..."
+docker-compose up -d --build >> "$LOG_FILE" 2>&1 || error "Failed to start Docker services"
 
 # Wait for PostgreSQL to be ready
 log "Waiting for PostgreSQL to be ready..."
 sleep 5
 for i in {1..30}; do
-    if docker exec $DB_CONTAINER_NAME pg_isready -U $DB_USER > /dev/null 2>&1; then
+    if docker-compose exec -T db pg_isready -U $DB_USER > /dev/null 2>&1; then
         log "✓ PostgreSQL is ready"
         break
     fi
@@ -189,10 +189,22 @@ for i in {1..30}; do
     sleep 1
 done
 
-log "✓ PostgreSQL container started successfully"
-log "  • Database: $DB_NAME"
-log "  • User: $DB_USER"
-log "  • Port: $DB_PORT"
+# Wait for API to be ready
+log "Waiting for API to be ready..."
+for i in {1..30}; do
+    if curl -s http://localhost:3001/ > /dev/null 2>&1; then
+        log "✓ API is ready"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        warn "API may not be ready yet"
+    fi
+    sleep 1
+done
+
+log "✓ Docker services started successfully"
+log "  • Database: PostgreSQL 16"
+log "  • API: Running on port 3001"
 
 # Step 3: Install Nginx + ModSecurity
 log "Step 3/8: Installing Nginx + ModSecurity..."
@@ -205,73 +217,22 @@ else
     log "✓ Nginx already installed ($(nginx -v 2>&1 | cut -d'/' -f2))"
 fi
 
-# Step 4: Setup Backend
-log "Step 4/8: Setting up Backend..."
+# Step 4: Setup Database
+log "Step 4/8: Setting up database..."
 
-cd "$BACKEND_DIR"
-
-# Install dependencies
-if [ ! -d "node_modules" ]; then
-    log "Installing backend dependencies..."
-    $PKG_MANAGER install >> "$LOG_FILE" 2>&1 || error "Failed to install backend dependencies"
-fi
-
-# Create/Update .env file
-log "Configuring backend environment..."
-cat > .env <<EOF
-# Database Configuration
-DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?schema=public"
-
-# JWT Configuration
-JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET"
-JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
-
-# Server Configuration
-NODE_ENV="production"
-PORT=3001
-
-# CORS Configuration
-CORS_ORIGIN="http://$PUBLIC_IP:8080,http://localhost:8080,http://$PUBLIC_IP,http://localhost"
-
-# Security
-BCRYPT_ROUNDS=10
-SESSION_SECRET="$SESSION_SECRET"
-
-# 2FA
-TWO_FACTOR_APP_NAME="Nginx Love UI"
-
-# SSL Configuration
-SSL_DIR="/etc/nginx/ssl"
-ACME_DIR="/var/www/html/.well-known/acme-challenge"
-EOF
-
-log "✓ Backend .env configured with:"
-log "  • Database: PostgreSQL (Docker)"
-log "  • CORS Origins: $PUBLIC_IP, localhost"
-log "  • JWT Secrets: Generated (64 chars each)"
-
-# Generate Prisma Client
-log "Generating Prisma client..."
-npx prisma generate >> "$LOG_FILE" 2>&1 || error "Failed to generate Prisma client"
-
-# Run migrations
+# Run migrations inside API container
 log "Running database migrations..."
-npx prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
+docker-compose exec -T api pnpm prisma:migrate >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
 
-# Force reseed database after fresh PostgreSQL install
+# Seed database
 log "Seeding database..."
-rm -f .seeded  # Remove marker to force reseed
-npx prisma db seed >> "$LOG_FILE" 2>&1 || warn "Failed to seed database"
-touch .seeded
+docker-compose exec -T api pnpm prisma:seed >> "$LOG_FILE" 2>&1 || warn "Failed to seed database"
 
-log "✓ Backend setup completed"
+log "✓ Database setup completed"
 
-# Step 5: Build Backend
-log "Step 5/8: Building Backend..."
-$PKG_MANAGER run build >> "$LOG_FILE" 2>&1 || error "Failed to build backend"
-log "✓ Backend built successfully"
+# Step 5: API is already built and running
+log "Step 5/8: API service..."
+log "✓ API is already built and running in Docker container"
 
 # Step 6: Setup Frontend
 log "Step 6/8: Setting up Frontend..."
@@ -342,26 +303,7 @@ fi
 # Setup systemd services
 log "Setting up systemd services..."
 
-# Backend service
-cat > /etc/systemd/system/nginx-love-backend.service <<EOF
-[Unit]
-Description=Nginx Love UI Backend
-After=network.target postgresql.service
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=$BACKEND_DIR
-Environment=NODE_ENV=production
-ExecStart=$(which node) dist/index.js
-Restart=always
-RestartSec=10
-StandardOutput=append:/var/log/nginx-love-backend.log
-StandardError=append:/var/log/nginx-love-backend-error.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# Note: Backend runs in Docker, systemd service not needed
 
 # Frontend service (if using preview mode)
 cat > /etc/systemd/system/nginx-love-frontend.service <<EOF
@@ -387,22 +329,16 @@ EOF
 # Reload systemd
 systemctl daemon-reload
 
-# Enable services
-systemctl enable nginx-love-backend.service >> "$LOG_FILE" 2>&1
+# Enable frontend service
 systemctl enable nginx-love-frontend.service >> "$LOG_FILE" 2>&1
 
-log "✓ Systemd services configured"
+log "✓ Systemd service configured"
 
 # Step 8: Start Services
 log "Step 8/8: Starting services..."
 
-# Start backend
-systemctl restart nginx-love-backend.service || error "Failed to start backend service"
-sleep 2
-if ! systemctl is-active --quiet nginx-love-backend.service; then
-    error "Backend service failed to start. Check logs: journalctl -u nginx-love-backend.service"
-fi
-log "✓ Backend service started"
+# Backend already running in Docker
+log "✓ Backend running in Docker (port 3001)"
 
 # Start frontend
 systemctl restart nginx-love-frontend.service || error "Failed to start frontend service"
@@ -434,8 +370,8 @@ log "Deployment Completed Successfully!"
 log "=================================="
 log ""
 log "📋 Service Status:"
-log "  • PostgreSQL: Docker container '$DB_CONTAINER_NAME'"
-log "  • Backend API: http://$PUBLIC_IP:3001"
+log "  • PostgreSQL: Docker container 'nginx-love-db'"
+log "  • Backend API: Docker container 'nginx-love-api' (http://$PUBLIC_IP:3001)"
 log "  • Frontend UI: http://$PUBLIC_IP:8080"
 log "  • Nginx: Port 80/443"
 log ""
@@ -452,14 +388,15 @@ log "  • JWT Refresh Secret: $JWT_REFRESH_SECRET"
 log "  • Session Secret: $SESSION_SECRET"
 log ""
 log "📝 Manage Services:"
-log "  PostgreSQL: docker start|stop|restart $DB_CONTAINER_NAME"
-log "  Backend:    systemctl {start|stop|restart|status} nginx-love-backend"
+log "  Docker:     docker-compose {up|down|restart}"
+log "  PostgreSQL: docker-compose {start|stop|restart} db"
+log "  Backend:    docker-compose {start|stop|restart} api"
 log "  Frontend:   systemctl {start|stop|restart|status} nginx-love-frontend"
 log "  Nginx:      systemctl {start|stop|restart|status} nginx"
 log ""
 log "📊 View Logs:"
-log "  PostgreSQL: docker logs -f $DB_CONTAINER_NAME"
-log "  Backend:    tail -f /var/log/nginx-love-backend.log"
+log "  PostgreSQL: docker-compose logs -f db"
+log "  Backend:    docker-compose logs -f api"
 log "  Frontend:   tail -f /var/log/nginx-love-frontend.log"
 log "  Nginx:      tail -f /var/log/nginx/error.log"
 log ""
@@ -479,8 +416,8 @@ cat > /root/.nginx-love-credentials <<EOF
 Frontend: http://$PUBLIC_IP:8080
 Backend:  http://$PUBLIC_IP:3001
 
-## Database (Docker)
-Container: $DB_CONTAINER_NAME
+## Database (Docker Compose)
+Container: nginx-love-db
 Host: localhost
 Port: $DB_PORT
 Database: $DB_NAME
@@ -496,11 +433,14 @@ SESSION_SECRET=$SESSION_SECRET
 Username: admin
 Password: admin123
 
-## Docker Commands
-Start:   docker start $DB_CONTAINER_NAME
-Stop:    docker stop $DB_CONTAINER_NAME
-Logs:    docker logs -f $DB_CONTAINER_NAME
-Connect: docker exec -it $DB_CONTAINER_NAME psql -U $DB_USER -d $DB_NAME
+## Docker Compose Commands
+Start all:   docker-compose up -d
+Stop all:    docker-compose down
+Restart:     docker-compose restart
+View logs:   docker-compose logs -f
+DB logs:     docker-compose logs -f db
+API logs:    docker-compose logs -f api
+Connect DB:  docker-compose exec db psql -U $DB_USER -d $DB_NAME
 EOF
 
 chmod 600 /root/.nginx-love-credentials

@@ -23,7 +23,38 @@ Comprehensive Nginx management system with ModSecurity WAF, Domain Management, S
 
 ## 🚀 Quick Start
 
-### 1. Clone & Install
+### Option 1: Using Scripts (Recommended)
+
+The easiest way to get started:
+
+```bash
+# Clone repository
+git clone https://github.com/TinyActive/nginx-love.git
+cd nginx-love
+
+# Run quick start script (sets up everything)
+bash scripts/quickstart.sh
+```
+
+This will:
+- Install dependencies
+- Start Docker services (PostgreSQL + API)
+- Run database migrations and seeding
+- Start frontend on http://localhost:5173
+
+**Default Credentials:**
+- Username: `admin`
+- Password: `admin123`
+
+**Press Ctrl+C to stop all services**
+
+---
+
+### Option 2: Manual Setup
+
+If you prefer manual control:
+
+#### 1. Clone & Install
 
 ```bash
 git clone https://github.com/TinyActive/nginx-love.git
@@ -31,7 +62,7 @@ cd nginx-love
 pnpm install
 ```
 
-### 2. Setup Environment Files
+#### 2. Setup Environment Files
 
 ```bash
 # Docker Compose (database + API)
@@ -43,7 +74,7 @@ cp apps/web/.env.example apps/web/.env
 
 **Important**: Update `.env` with secure secrets before deploying to production.
 
-### 3. Start Services with Docker
+#### 3. Start Services with Docker
 
 ```bash
 # Start database and API in containers
@@ -53,7 +84,7 @@ docker-compose up -d
 docker-compose logs -f api
 ```
 
-### 4. Setup Database (First time only)
+#### 4. Setup Database (First time only)
 
 ```bash
 # Run migrations inside the API container
@@ -61,53 +92,123 @@ docker-compose exec api pnpm prisma:migrate
 docker-compose exec api pnpm prisma:seed
 ```
 
-### 5. Run Frontend
+#### 5. Run Frontend
 
 ```bash
 # Start frontend (connects to API on http://localhost:3001)
 pnpm --filter @nginx-love/web dev    # http://localhost:5173
 ```
 
-## 🔧 Alternative: Local Development (without Docker)
+## 📜 Deployment Scripts
 
-If you prefer running API locally instead of in Docker:
+All scripts are located in the `scripts/` directory and are ready to use.
+
+### 🎯 `quickstart.sh` - Quick Testing (Recommended)
+
+**Best for:** First-time setup, testing, demos
 
 ```bash
-# 1. Start only database
-docker-compose up -d db
-
-# 2. Copy backend env file
-cp apps/api/.env.example apps/api/.env
-
-# 3. Setup database (from apps/api/)
-cd apps/api
-pnpm prisma:generate
-pnpm prisma:migrate
-pnpm prisma:seed
-cd ../..
-
-# 4. Run all apps locally
-pnpm dev
-
-# Or run individually
-pnpm --filter @nginx-love/web dev    # Frontend: http://localhost:5173
-pnpm --filter @nginx-love/api dev    # API: http://localhost:3001
+bash scripts/quickstart.sh
 ```
 
-## 🔐 Default Credentials
+**What it does:**
+- ✅ Installs dependencies (pnpm)
+- ✅ Copies `.env` files from examples
+- ✅ Starts Docker services (PostgreSQL + API)
+- ✅ Runs database migrations and seeding
+- ✅ Starts frontend on http://localhost:5173
+- ✅ Handles graceful shutdown (Ctrl+C)
 
-- **Username**: `admin`
-- **Password**: `admin123`
+**Architecture:**
+- Database: Docker
+- API: Docker (port 3001)
+- Frontend: Local (port 5173)
 
-## 📚 API Documentation
+---
 
-- [Complete API Reference](./docs/API.md) - All API endpoints and examples
+### 🛠️ `start.sh` - Local Development
 
-## 🛠️ Available Commands
+**Best for:** Development with hot-reload for API and frontend
+
+```bash
+bash scripts/start.sh
+```
+
+**What it does:**
+- ✅ Installs dependencies (pnpm)
+- ✅ Copies `.env` files from examples
+- ✅ Starts PostgreSQL in Docker
+- ✅ Runs API locally with hot-reload (port 3001)
+- ✅ Runs frontend locally with hot-reload (port 5173)
+- ✅ Handles graceful shutdown (Ctrl+C)
+
+**Architecture:**
+- Database: Docker
+- API: Local (port 3001)
+- Frontend: Local (port 5173)
+
+---
+
+### 🚀 `deploy.sh` - Production Deployment
+
+**Best for:** Production servers with Nginx + ModSecurity
+
+```bash
+sudo bash scripts/deploy.sh
+```
+
+**What it does:**
+1. ✅ Installs prerequisites (Node.js, pnpm, Docker, Docker Compose)
+2. ✅ Builds and starts Docker services (PostgreSQL + API)
+3. ✅ Runs database migrations and seeding
+4. ✅ Installs Nginx + ModSecurity WAF
+5. ✅ Builds and deploys frontend
+6. ✅ Configures systemd services
+7. ✅ Saves credentials to `/root/.nginx-love-credentials`
+
+**After deployment:**
+- Frontend: `http://YOUR_IP:8080`
+- Backend API: `http://YOUR_IP:3001`
+
+**Manage services:**
+```bash
+# Docker services
+docker-compose up -d           # Start all
+docker-compose down            # Stop all
+docker-compose logs -f api     # View API logs
+
+# Frontend (systemd)
+systemctl restart nginx-love-frontend
+
+# Nginx
+systemctl restart nginx
+```
+
+**Architecture:**
+- Database: Docker
+- API: Docker (port 3001)
+- Frontend: Systemd service (port 8080)
+- Nginx: Reverse proxy + ModSecurity WAF
+
+---
+
+### 📊 Script Comparison
+
+| Script | Database | API | Frontend | Root | Use Case |
+|--------|----------|-----|----------|------|----------|
+| `quickstart.sh` | Docker | Docker | Local | ❌ | Quick testing |
+| `start.sh` | Docker | Local | Local | ❌ | Development |
+| `deploy.sh` | Docker | Docker | Systemd | ✅ | Production |
+
+---
+
+## 🛠️ Manual Commands
+
+For advanced users who want manual control:
 
 ```bash
 # Development
-pnpm dev          # Start all apps
+pnpm dev          # Start all apps locally
 pnpm build        # Build all apps
 pnpm lint         # Lint all apps
 
@@ -125,6 +226,8 @@ docker-compose exec api pnpm prisma:migrate  # Run migrations
 docker-compose down            # Stop all services
 ```
 
+---
+
 ## 📁 Project Structure
 
 ```
@@ -136,6 +239,12 @@ nginx-love/
 ├── scripts/          # Deployment scripts
 └── config/           # Configuration files
 ```
+
+---
+
+## 📚 Documentation
+
+- [Complete API Reference](./docs/API.md) - All API endpoints and examples
 
 ## 🔗 Links
 
