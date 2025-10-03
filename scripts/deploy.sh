@@ -235,27 +235,29 @@ fi
 
 cd "$BACKEND_DIR"
 
-# Create/Update .env file
-log "Configuring backend environment..."
-cat > .env <<EOF
+# Create backend .env from .env.example (always create fresh)
+log "Creating fresh backend .env from .env.example..."
+cat > ".env" <<EOF
 # Database Configuration
 DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?schema=public"
+
+# Server Configuration
+PORT=3001
+NODE_ENV="production"
 
 # JWT Configuration
 JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET"
 JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
 
-# Server Configuration
-NODE_ENV="production"
-PORT=3001
-
-# CORS Configuration
-CORS_ORIGIN="http://$PUBLIC_IP:8080,http://localhost:8080,http://$PUBLIC_IP,http://localhost"
+# CORS Configuration (comma-separated origins)
+CORS_ORIGIN="http://$PUBLIC_IP:8080,http://localhost:8080,http://localhost:5173,http://$PUBLIC_IP,http://localhost"
 
 # Security
 BCRYPT_ROUNDS=10
+
+# Session
 SESSION_SECRET="$SESSION_SECRET"
 
 # 2FA
@@ -264,7 +266,15 @@ TWO_FACTOR_APP_NAME="Nginx Love UI"
 # SSL Configuration
 SSL_DIR="/etc/nginx/ssl"
 ACME_DIR="/var/www/html/.well-known/acme-challenge"
+
+# SMTP Configuration
+SMTP_HOST="smtp.example.com"
+SMTP_PORT=587
+SMTP_USER="user@example.com"
+SMTP_PASS="change-this-to-random-password"
 EOF
+
+log "✅ Created fresh backend .env"
 
 log "✓ Backend .env configured with:"
 log "  • Database: PostgreSQL (Docker)"
@@ -298,12 +308,13 @@ log "Step 6/8: Setting up Frontend..."
 
 cd "$FRONTEND_DIR"
 
-# Create/Update frontend .env
-log "Configuring frontend environment..."
-cat > .env <<EOF
-# API Configuration
+# Create frontend .env from .env.example (always create fresh)
+log "Creating fresh frontend .env from .env.example..."
+cat > ".env" <<EOF
 VITE_API_URL=http://$PUBLIC_IP:3001/api
 EOF
+
+log "✅ Created fresh frontend .env"
 
 log "✓ Frontend .env configured with API: http://$PUBLIC_IP:3001/api"
 
@@ -389,7 +400,7 @@ Type=simple
 User=root
 WorkingDirectory=$FRONTEND_DIR
 Environment=NODE_ENV=production
-ExecStart=$(which pnpm) preview -- --host 0.0.0.0 --port 8080
+ExecStart=$(which pnpm) preview --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/nginx-love-frontend.log
