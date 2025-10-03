@@ -16,9 +16,10 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Configuration
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$PROJECT_DIR/backend"
-FRONTEND_DIR="$PROJECT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BACKEND_DIR="$PROJECT_DIR/apps/api"
+FRONTEND_DIR="$PROJECT_DIR/apps/web"
 LOG_FILE="/var/log/nginx-love-ui-deploy.log"
 
 # Database configuration
@@ -92,6 +93,22 @@ else
     log "✓ npm $(npm -v) detected"
 fi
 
+# Check pnpm (required for monorepo)
+if ! command -v pnpm &> /dev/null; then
+    warn "pnpm not found. Installing pnpm..."
+    npm install -g pnpm@8.15.0 >> "$LOG_FILE" 2>&1 || error "Failed to install pnpm"
+    log "✓ pnpm $(pnpm -v) installed successfully"
+else
+    PNPM_VERSION=$(pnpm -v | cut -d'.' -f1)
+    if [ "$PNPM_VERSION" -lt 8 ]; then
+        warn "pnpm version too old ($(pnpm -v)). Upgrading to 8.15.0..."
+        npm install -g pnpm@8.15.0 >> "$LOG_FILE" 2>&1 || error "Failed to upgrade pnpm"
+        log "✓ pnpm upgraded to $(pnpm -v)"
+    else
+        log "✓ pnpm $(pnpm -v) detected"
+    fi
+fi
+
 # Check Docker
 if ! command -v docker &> /dev/null; then
     warn "Docker not found. Installing latest Docker..."
@@ -135,14 +152,8 @@ else
     log "✓ Docker Compose $(docker-compose -v | cut -d' ' -f4 | tr -d ',') detected"
 fi
 
-# Check npm/yarn/bun
-if command -v bun &> /dev/null; then
-    PKG_MANAGER="bun"
-elif command -v npm &> /dev/null; then
-    PKG_MANAGER="npm"
-else
-    error "No package manager found. Please install npm or bun."
-fi
+# Use pnpm for monorepo
+PKG_MANAGER="pnpm"
 log "✓ Package manager: $PKG_MANAGER"
 
 # Step 2: Setup PostgreSQL with Docker
@@ -213,35 +224,40 @@ fi
 # Step 4: Setup Backend
 log "Step 4/8: Setting up Backend..."
 
-cd "$BACKEND_DIR"
-
-# Install dependencies
+# Install root dependencies first (for monorepo)
+cd "$PROJECT_DIR"
 if [ ! -d "node_modules" ]; then
-    log "Installing backend dependencies..."
-    $PKG_MANAGER install >> "$LOG_FILE" 2>&1 || error "Failed to install backend dependencies"
+    log "Installing monorepo dependencies..."
+    $PKG_MANAGER install >> "$LOG_FILE" 2>&1 || error "Failed to install monorepo dependencies"
+else
+    log "✓ Monorepo dependencies already installed"
 fi
 
-# Create/Update .env file
-log "Configuring backend environment..."
-cat > .env <<EOF
+cd "$BACKEND_DIR"
+
+# Create backend .env from .env.example (always create fresh)
+log "Creating fresh backend .env from .env.example..."
+cat > ".env" <<EOF
 # Database Configuration
 DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?schema=public"
+
+# Server Configuration
+PORT=3001
+NODE_ENV="production"
 
 # JWT Configuration
 JWT_ACCESS_SECRET="$JWT_ACCESS_SECRET"
 JWT_REFRESH_SECRET="$JWT_REFRESH_SECRET"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
 
-# Server Configuration
-NODE_ENV="production"
-PORT=3001
-
-# CORS Configuration
-CORS_ORIGIN="http://$PUBLIC_IP:8080,http://localhost:8080,http://$PUBLIC_IP,http://localhost"
+# CORS Configuration (comma-separated origins)
+CORS_ORIGIN="http://$PUBLIC_IP:8080,http://localhost:8080,http://localhost:5173,http://$PUBLIC_IP,http://localhost"
 
 # Security
 BCRYPT_ROUNDS=10
+
+# Session
 SESSION_SECRET="$SESSION_SECRET"
 
 # 2FA
@@ -250,7 +266,15 @@ TWO_FACTOR_APP_NAME="Nginx Love UI"
 # SSL Configuration
 SSL_DIR="/etc/nginx/ssl"
 ACME_DIR="/var/www/html/.well-known/acme-challenge"
+
+# SMTP Configuration
+SMTP_HOST="smtp.example.com"
+SMTP_PORT=587
+SMTP_USER="user@example.com"
+SMTP_PASS="change-this-to-random-password"
 EOF
+
+log "✅ Created fresh backend .env"
 
 log "✓ Backend .env configured with:"
 log "  • Database: PostgreSQL (Docker)"
@@ -259,23 +283,24 @@ log "  • JWT Secrets: Generated (64 chars each)"
 
 # Generate Prisma Client
 log "Generating Prisma client..."
-npx prisma generate >> "$LOG_FILE" 2>&1 || error "Failed to generate Prisma client"
+pnpm prisma:generate >> "$LOG_FILE" 2>&1 || error "Failed to generate Prisma client"
 
 # Run migrations
 log "Running database migrations..."
-npx prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
+pnpm exec prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
 
 # Force reseed database after fresh PostgreSQL install
 log "Seeding database..."
 rm -f .seeded  # Remove marker to force reseed
-npx prisma db seed >> "$LOG_FILE" 2>&1 || warn "Failed to seed database"
+pnpm prisma:seed >> "$LOG_FILE" 2>&1 || warn "Failed to seed database"
 touch .seeded
 
 log "✓ Backend setup completed"
 
 # Step 5: Build Backend
 log "Step 5/8: Building Backend..."
-$PKG_MANAGER run build >> "$LOG_FILE" 2>&1 || error "Failed to build backend"
+cd "$PROJECT_DIR"
+pnpm --filter @nginx-love/api build >> "$LOG_FILE" 2>&1 || error "Failed to build backend"
 log "✓ Backend built successfully"
 
 # Step 6: Setup Frontend
@@ -283,18 +308,13 @@ log "Step 6/8: Setting up Frontend..."
 
 cd "$FRONTEND_DIR"
 
-# Install dependencies
-if [ ! -d "node_modules" ]; then
-    log "Installing frontend dependencies..."
-    $PKG_MANAGER install >> "$LOG_FILE" 2>&1 || error "Failed to install frontend dependencies"
-fi
-
-# Create/Update frontend .env
-log "Configuring frontend environment..."
-cat > .env <<EOF
-# API Configuration
+# Create frontend .env from .env.example (always create fresh)
+log "Creating fresh frontend .env from .env.example..."
+cat > ".env" <<EOF
 VITE_API_URL=http://$PUBLIC_IP:3001/api
 EOF
+
+log "✅ Created fresh frontend .env"
 
 log "✓ Frontend .env configured with API: http://$PUBLIC_IP:3001/api"
 
@@ -306,12 +326,13 @@ fi
 
 # Build frontend
 log "Building frontend..."
-$PKG_MANAGER run build >> "$LOG_FILE" 2>&1 || error "Failed to build frontend"
+cd "$PROJECT_DIR"
+pnpm --filter @nginx-love/web build >> "$LOG_FILE" 2>&1 || error "Failed to build frontend"
 
 # Update CSP in built index.html to use public IP
 log "Updating Content Security Policy with public IP..."
-sed -i "s|__API_URL__|http://$PUBLIC_IP:3001 http://localhost:3001|g" dist/index.html
-sed -i "s|__WS_URL__|ws://$PUBLIC_IP:* ws://localhost:*|g" dist/index.html
+sed -i "s|__API_URL__|http://$PUBLIC_IP:3001 http://localhost:3001|g" "$FRONTEND_DIR/dist/index.html"
+sed -i "s|__WS_URL__|ws://$PUBLIC_IP:* ws://localhost:*|g" "$FRONTEND_DIR/dist/index.html"
 
 log "✓ Frontend built successfully"
 log "✓ CSP configured for: http://$PUBLIC_IP:3001, http://localhost:3001"
@@ -379,7 +400,7 @@ Type=simple
 User=root
 WorkingDirectory=$FRONTEND_DIR
 Environment=NODE_ENV=production
-ExecStart=$(which $PKG_MANAGER) run preview -- --host 0.0.0.0 --port 8080
+ExecStart=$(which pnpm) preview --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/nginx-love-frontend.log

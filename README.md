@@ -2,7 +2,7 @@
 
 Comprehensive Nginx management system with ModSecurity WAF, Domain Management, SSL Certificates and Real-time Monitoring.
 
-Recommendations: The software is developed by AI so it cannot guarantee absolute safety so please protect Port Protal and API with firewall for safety if any problem is detected please notify us and we will handle it.
+Recommendations: The software is developed by AI so it cannot guarantee absolute safety so please protect Port Portal and API with firewall for safety if any problem is detected please notify us and we will handle it.
 
 ## ✨ Key Features
 
@@ -23,8 +23,8 @@ Recommendations: The software is developed by AI so it cannot guarantee absolute
 
 | Use Case | Script | Description |
 |----------|--------|-------------|
-| **New Server (Production)** | `./deploy.sh` | Full installation of Nginx + ModSecurity + Backend + Frontend with systemd services |
-| **Development/Testing** | `./quickstart.sh` | Quick run in dev mode (no Nginx installation, no root required) |
+| **New Server (Production)** | `./scripts/deploy.sh` | Full installation of Nginx + ModSecurity + Backend + Frontend with systemd services |
+| **Development/Testing** | `./scripts/quickstart.sh` | Quick run in dev mode (no Nginx installation, no root required) |
 
 ### 🖥️ Production Deployment (New Server)
 
@@ -34,7 +34,7 @@ git clone https://github.com/TinyActive/nginx-love.git
 cd nginx-love
 
 # Run deployment script (requires root)
-sudo ./deploy.sh
+sudo ./scripts/deploy.sh
 ```
 
 **Minimum Requirements:**
@@ -46,6 +46,7 @@ sudo ./deploy.sh
 
 The script will **automatically install everything**:
 - ✅ Node.js 20.x (if not present)
+- ✅ pnpm 8.15.0 (if not present)
 - ✅ Docker + Docker Compose (if not present)
 - ✅ PostgreSQL 15 container (auto-generated credentials)
 - ✅ Nginx + ModSecurity + OWASP CRS
@@ -63,8 +64,17 @@ git clone https://github.com/TinyActive/nginx-love.git
 cd nginx-love
 
 # Run quick start (no root required)
-./quickstart.sh
+./scripts/quickstart.sh
 ```
+
+This will:
+- Install dependencies
+- Start PostgreSQL in Docker (optional)
+- Run database migrations and seeding
+- Start backend on http://localhost:3001
+- Start frontend on http://localhost:8080 (dev mode)
+
+**Press Ctrl+C to stop all services**
 
 ## 🔐 Default Login
 
@@ -77,17 +87,24 @@ Password: admin123
 
 ## 🌐 Access URLs
 
+### Development (quickstart.sh)
 - **Frontend**: http://localhost:8080
 - **Backend API**: http://localhost:3001
 - **API Documentation**: http://localhost:3001/api-docs
 - **Prisma Studio**: http://localhost:5555 (dev only)
 - **Health Check**: http://localhost:3001/api/health
 
+### Production (deploy.sh)
+- **Frontend**: http://YOUR_IP:8080
+- **Backend API**: http://YOUR_IP:3001
+- **API Documentation**: http://YOUR_IP:3001/api-docs
+- **Health Check**: http://YOUR_IP:3001/api/health
+
 ## 📚 Documentation
 
-- [API Documentation](./backend/API_DOCUMENTATION.md) - Complete REST API reference
-- [OpenAPI Specification](./openapi.yaml) - Swagger/OpenAPI 3.0 spec
-- [Database Schema](./backend/prisma/schema.prisma) - Prisma schema with relationships
+- [API Documentation](./docs/API.md) - Complete REST API reference
+- [OpenAPI Specification](./apps/api/openapi.yaml) - Swagger/OpenAPI 3.0 spec
+- [Database Schema](./apps/api/prisma/schema.prisma) - Prisma schema with relationships
 - [Installation Scripts](./scripts/) - Automated installation scripts
 
 ## 🔌 API Endpoints Overview
@@ -153,7 +170,7 @@ Password: admin123
 - **Internationalization**: i18next
 
 ### Backend
-- **Runtime**: Node.js 20+ 
+- **Runtime**: Node.js 20+
 - **Framework**: Express.js + TypeScript
 - **Database ORM**: Prisma
 - **Authentication**: JWT + Refresh Tokens + 2FA (TOTP)
@@ -250,24 +267,23 @@ sudo nginx -s reload  # Reload configuration
 cd nginx-love
 
 # Backend (Terminal 1)
-cd backend
-npm run dev
+cd apps/api && pnpm dev
 
-# Frontend (Terminal 2) 
-npm run dev
+# Frontend (Terminal 2)
+cd apps/web && pnpm dev
 
 # Database operations
-cd backend
-npm run prisma:studio    # Open Prisma Studio
-npm run prisma:migrate   # Run migrations
-npm run prisma:seed      # Seed database
+cd apps/api
+pnpm prisma:studio    # Open Prisma Studio
+pnpm prisma:migrate   # Run migrations
+pnpm prisma:seed      # Seed database
 
 # Stop services
 Ctrl+C  # In each terminal
 
 # Or force kill processes
 npx kill-port 3001    # Backend port
-npx kill-port 8080    # Frontend port
+npx kill-port 8080    # Frontend port (dev & prod)
 npx kill-port 5555    # Prisma Studio port
 ```
 
@@ -299,8 +315,8 @@ tail -f /tmp/backend.log     # Backend development logs
 tail -f /tmp/frontend.log    # Frontend development logs
 
 # Application-specific logs
-cd backend && npm run dev    # Shows real-time backend logs
-npm run dev                  # Shows real-time frontend logs + HMR
+cd apps/api && pnpm dev    # Shows real-time backend logs
+cd apps/web && pnpm dev    # Shows real-time frontend logs + HMR
 
 # Database logs
 docker logs -f nginx-love-postgres
@@ -315,12 +331,12 @@ multitail /tmp/backend.log /tmp/frontend.log
 ```bash
 # Check what's using ports
 sudo netstat -tulnp | grep :3001    # Backend port
-sudo netstat -tulnp | grep :8080    # Frontend port
+sudo netstat -tulnp | grep :8080    # Frontend port (dev & prod)
 sudo netstat -tulnp | grep :5432    # PostgreSQL port
 
 # Kill processes on specific ports
 sudo lsof -ti:3001 | xargs kill -9  # Backend
-sudo lsof -ti:8080 | xargs kill -9  # Frontend
+sudo lsof -ti:8080 | xargs kill -9  # Frontend (dev & prod)
 sudo lsof -ti:5555 | xargs kill -9  # Prisma Studio
 
 # Alternative method
@@ -335,17 +351,17 @@ docker ps | grep postgres
 docker container inspect nginx-love-postgres
 
 # Check database connectivity
-cd backend
-npx prisma db push --force-reset  # Reset database
-npx prisma generate                # Regenerate client
-npx prisma migrate reset           # Reset migrations
+cd apps/api
+pnpm prisma db push --force-reset  # Reset database
+pnpm prisma generate                # Regenerate client
+pnpm prisma migrate reset           # Reset migrations
 
 # Check environment variables
-cat backend/.env | grep DATABASE_URL
-cd backend && node -e "console.log(process.env.DATABASE_URL)"
+cat apps/api/.env | grep DATABASE_URL
+cd apps/api && node -e "console.log(process.env.DATABASE_URL)"
 
 # Direct database connection test
-docker exec -it nginx-love-postgres psql -U postgres -d nginx_waf
+docker exec -it nginx-love-postgres psql -U nginx_love_user -d nginx_love_db
 ```
 
 ### Nginx Configuration Issues
@@ -376,8 +392,8 @@ ps aux | grep node | grep -v grep
 docker stats nginx-love-postgres
 
 # Database performance
-docker exec -it nginx-love-postgres psql -U postgres -d nginx_waf -c "
-SELECT schemaname,tablename,attname,n_distinct,correlation 
+docker exec -it nginx-love-postgres psql -U nginx_love_user -d nginx_love_db -c "
+SELECT schemaname,tablename,attname,n_distinct,correlation
 FROM pg_stats WHERE tablename IN ('domains','users','performance_metrics');
 "
 ```
@@ -397,7 +413,7 @@ sudo kill -9 <PID>
 docker restart nginx-love-postgres
 # Wait 10 seconds for startup
 sleep 10
-cd backend && npm run dev
+cd apps/api && pnpm dev
 ```
 
 **Error: "ModSecurity failed to load"**
@@ -425,43 +441,42 @@ git clone https://github.com/TinyActive/nginx-love.git
 cd nginx-love
 
 # 2. Install dependencies
-npm install                    # Frontend dependencies
-cd backend && npm install      # Backend dependencies
+pnpm install
 
 # 3. Setup database
 docker-compose -f docker-compose.db.yml up -d
-cd backend
+cd apps/api
 cp .env.example .env          # Configure environment variables
-npm run prisma:migrate        # Run database migrations
-npm run prisma:seed          # Seed initial data
+pnpm prisma:migrate        # Run database migrations
+pnpm prisma:seed          # Seed initial data
 
 # 4. Start development servers
-npm run dev                   # Frontend (Terminal 1)
-cd backend && npm run dev     # Backend (Terminal 2)
+cd apps/web && pnpm dev    # Frontend (Terminal 1)
+cd apps/api && pnpm dev     # Backend (Terminal 2)
 ```
 
 ### Code Quality & Standards
 ```bash
 # Linting and formatting
-npm run lint                  # ESLint check
-npm run lint:fix             # Auto-fix ESLint issues
+pnpm lint                  # ESLint check
+pnpm lint:fix             # Auto-fix ESLint issues
 
 # Type checking
-cd backend && npx tsc --noEmit    # TypeScript check
+cd apps/api && npx tsc --noEmit    # TypeScript check
 npx tsc --noEmit                  # Frontend TypeScript check
 
 # Database operations
-cd backend
-npm run prisma:studio        # Database GUI
-npm run prisma:generate      # Regenerate Prisma client
-npm run prisma:migrate       # Create new migration
+cd apps/api
+pnpm prisma:studio        # Database GUI
+pnpm prisma:generate      # Regenerate Prisma client
+pnpm prisma:migrate       # Create new migration
 ```
 
 ### Testing
 ```bash
 # Unit tests (future implementation)
-npm test                     # Frontend tests
-cd backend && npm test       # Backend tests
+pnpm test                     # Frontend tests
+cd apps/api && pnpm test       # Backend tests
 
 # API testing
 curl -X GET http://localhost:3001/api/health
@@ -470,7 +485,7 @@ curl -X POST http://localhost:3001/api/auth/login \
   -d '{"username":"admin","password":"admin123"}'
 ```
 
-##�📝 Contributing
+## 📝 Contributing
 
 1. **Fork the repository**
    ```bash
