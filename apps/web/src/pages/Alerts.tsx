@@ -24,6 +24,24 @@ const Alerts = () => {
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Helper function to generate condition based on alert type
+  const getConditionForAlertType = (alertType: "cpu" | "memory" | "disk" | "upstream" | "ssl"): string => {
+    switch (alertType) {
+      case "cpu":
+        return "cpu > threshold";
+      case "memory":
+        return "memory > threshold";
+      case "disk":
+        return "disk > threshold";
+      case "upstream":
+        return "upstream_status == down";
+      case "ssl":
+        return "ssl_days_remaining < threshold";
+      default:
+        return "cpu > threshold";
+    }
+  };
+
   const [channelForm, setChannelForm] = useState({
     name: "",
     type: "email" as "email" | "telegram",
@@ -36,7 +54,7 @@ const Alerts = () => {
   const [ruleForm, setRuleForm] = useState({
     name: "",
     alertType: "cpu" as "cpu" | "memory" | "disk" | "upstream" | "ssl",
-    condition: "",
+    condition: getConditionForAlertType("cpu"),
     threshold: 80,
     severity: "warning" as "critical" | "warning" | "info",
     channels: [] as string[],
@@ -145,7 +163,7 @@ const Alerts = () => {
     setRuleForm({
       name: "",
       alertType: "cpu",
-      condition: "",
+      condition: getConditionForAlertType("cpu"),
       threshold: 80,
       severity: "warning",
       channels: [],
@@ -156,38 +174,32 @@ const Alerts = () => {
 
   // Update condition and defaults based on alert type
   const handleAlertTypeChange = (type: "cpu" | "memory" | "disk" | "upstream" | "ssl") => {
-    let condition = "";
     let threshold = 80;
     let checkInterval = 60;
     let name = "";
 
     switch (type) {
       case "cpu":
-        condition = "cpu > threshold";
         threshold = 80;
         checkInterval = 30;
         name = "High CPU Usage";
         break;
       case "memory":
-        condition = "memory > threshold";
         threshold = 85;
         checkInterval = 30;
         name = "High Memory Usage";
         break;
       case "disk":
-        condition = "disk > threshold";
         threshold = 90;
         checkInterval = 300; // 5 minutes
         name = "High Disk Usage";
         break;
       case "upstream":
-        condition = "upstream_status == down";
         threshold = 1;
         checkInterval = 60;
         name = "Upstream Down";
         break;
       case "ssl":
-        condition = "ssl_days_remaining < threshold";
         threshold = 30;
         checkInterval = 86400; // 1 day
         name = "SSL Certificate Expiring";
@@ -197,7 +209,7 @@ const Alerts = () => {
     setRuleForm({
       ...ruleForm,
       alertType: type,
-      condition,
+      condition: getConditionForAlertType(type),
       threshold,
       checkInterval,
       name: ruleForm.name || name
