@@ -1,59 +1,23 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: nginx-love-db
-    restart: unless-stopped
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-nginx_waf}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - nginx-love-network
-
-  api:
+  portal:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
-    container_name: nginx-love-api
-    restart: unless-stopped
+      dockerfile: Dockerfile
+    container_name: nginx-modsec-portal
     ports:
-      - "${API_PORT:-3001}:3001"
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-nginx_waf}?schema=public
-      PORT: 3001
-      NODE_ENV: production
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-this-to-random-secret}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-this-to-random-secret}
-      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
-      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
-      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
-      SESSION_SECRET: ${SESSION_SECRET:-change-this-to-random-secret}
-      TWO_FACTOR_APP_NAME: ${TWO_FACTOR_APP_NAME:-Nginx WAF Admin}
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - nginx-love-network
+      - "8088:8088"
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8088/health"]
       interval: 30s
-      timeout: 3s
-      start_period: 10s
+      timeout: 10s
       retries: 3
-
-volumes:
-  postgres_data:
+      start_period: 40s
+    environment:
+      - NODE_ENV=production
+    networks:
+      - portal-network
 
 networks:
-  nginx-love-network:
+  portal-network:
     driver: bridge
