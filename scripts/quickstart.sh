@@ -64,38 +64,31 @@ else
     DATABASE_URL=${DATABASE_URL:-"postgresql://user:password@localhost:5432/nginx_love_db?schema=public"}
 fi
 
-# Check if .env exists
+# Create backend .env from .env.example
 if [ ! -f "$BACKEND_DIR/.env" ]; then
-    echo "⚠️  .env not found. Creating..."
-    cat > "$BACKEND_DIR/.env" <<EOF
-# Database Configuration
-DATABASE_URL="$DATABASE_URL"
+    echo "⚠️  Backend .env not found. Creating from .env.example..."
+    cp "$BACKEND_DIR/.env.example" "$BACKEND_DIR/.env"
 
-# JWT Configuration
-JWT_ACCESS_SECRET="dev-access-secret-change-in-production"
-JWT_REFRESH_SECRET="dev-refresh-secret-change-in-production"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
+    # Replace with actual values
+    sed -i.bak "s|DATABASE_URL=.*|DATABASE_URL=\"$DATABASE_URL\"|g" "$BACKEND_DIR/.env"
+    sed -i.bak "s|CORS_ORIGIN=.*|CORS_ORIGIN=\"http://localhost:8080,http://localhost:5173\"|g" "$BACKEND_DIR/.env"
+    sed -i.bak "s|NODE_ENV=.*|NODE_ENV=development|g" "$BACKEND_DIR/.env"
+    rm -f "$BACKEND_DIR/.env.bak"
 
-# Server Configuration
-NODE_ENV="development"
-PORT=3001
-
-# CORS Configuration
-CORS_ORIGIN="http://localhost:8080,http://localhost:5173"
-
-# Security
-BCRYPT_ROUNDS=10
-SESSION_SECRET="dev-session-secret-change-in-production"
-
-# 2FA
-TWO_FACTOR_APP_NAME="Nginx Love UI - Dev"
-
-# SSL Configuration
-SSL_DIR="/etc/nginx/ssl"
-ACME_DIR="/var/www/html/.well-known/acme-challenge"
-EOF
     echo "✅ Created $BACKEND_DIR/.env"
+fi
+
+# Create frontend .env from .env.example
+if [ ! -f "$FRONTEND_DIR/.env" ]; then
+    echo "⚠️  Frontend .env not found. Creating from .env.example..."
+    cp "$FRONTEND_DIR/.env.example" "$FRONTEND_DIR/.env"
+
+    # Replace with actual values
+    sed -i.bak "s|VITE_API_URL=.*|VITE_API_URL=http://localhost:3001/api|g" "$FRONTEND_DIR/.env"
+    sed -i.bak "s|VITE_DEMO_MODE=.*|VITE_DEMO_MODE=true|g" "$FRONTEND_DIR/.env"
+    rm -f "$FRONTEND_DIR/.env.bak"
+
+    echo "✅ Created $FRONTEND_DIR/.env"
 fi
 
 # Install dependencies
@@ -118,10 +111,16 @@ cd "$BACKEND_DIR" && pnpm dev > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 echo "✅ Backend started (PID: $BACKEND_PID) - http://localhost:3001"
 
+# Store the process group ID for better signal handling
+BACKEND_PGID=$(ps -o pgid= -p $BACKEND_PID | tr -d ' ')
+
 # Start frontend in background
 cd "$FRONTEND_DIR" && pnpm dev > /tmp/frontend.log 2>&1 &
 FRONTEND_PID=$!
-echo "✅ Frontend started (PID: $FRONTEND_PID) - http://localhost:8080"
+echo "✅ Frontend started (PID: $FRONTEND_PID) - http://localhost:5173"
+
+# Store the process group ID for better signal handling
+FRONTEND_PGID=$(ps -o pgid= -p $FRONTEND_PID | tr -d ' ')
 
 echo ""
 echo "================================"
@@ -129,7 +128,7 @@ echo "✨ Quick Start Completed!"
 echo "================================"
 echo ""
 echo "🌐 Access:"
-echo "   Frontend: http://localhost:8080"
+echo "   Frontend: http://localhost:5173"
 echo "   Backend:  http://localhost:3001"
 echo ""
 echo "🔐 Login:"
@@ -161,6 +160,105 @@ fi
 echo ""
 echo "Press Ctrl+C to stop all services"
 echo ""
+
+# Cleanup function
+cleanup() {
+    echo ""
+    echo "🛑 Stopping services..."
+
+    # Method 1: Kill by port (most reliable for Node.js processes)
+    echo "🔍 Stopping backend on port 3001..."
+    BACKEND_PORT_PIDS=$(lsof -ti:3001 2>/dev/null)
+    if [ -n "$BACKEND_PORT_PIDS" ]; then
+        echo "🔍 Found backend processes: $BACKEND_PORT_PIDS"
+        for pid in $BACKEND_PORT_PIDS; do
+            # Get the full command to verify it's our Node.js process
+            CMD=$(ps -p $pid -o cmd= 2>/dev/null)
+            if [[ "$CMD" == *"node"* ]]; then
+                echo "🔍 Stopping Node.js process $pid..."
+                kill -TERM $pid 2>/dev/null
+                sleep 1
+                # Check if still running and force kill if needed
+                if kill -0 $pid 2>/dev/null; then
+                    echo "🔍 Process still running, sending SIGKILL..."
+                    kill -KILL $pid 2>/dev/null
+                fi
+            fi
+        done
+        echo "✅ Backend on port 3001 stopped"
+    fi
+
+    echo "🔍 Stopping frontend on port 5173..."
+    FRONTEND_PORT_PIDS=$(lsof -ti:5173 2>/dev/null)
+    if [ -n "$FRONTEND_PORT_PIDS" ]; then
+        for pid in $FRONTEND_PORT_PIDS; do
+            kill -TERM $pid 2>/dev/null
+            sleep 1
+            if kill -0 $pid 2>/dev/null; then
+                kill -KILL $pid 2>/dev/null
+            fi
+        done
+        echo "✅ Frontend on port 5173 stopped"
+    fi
+
+    # Method 2: Kill process groups (as backup)
+    if [ -n "$BACKEND_PGID" ]; then
+        echo "🔍 Stopping backend process group (PGID: $BACKEND_PGID)..."
+        kill -TERM -$BACKEND_PGID 2>/dev/null
+        sleep 1
+        if kill -0 -$BACKEND_PGID 2>/dev/null; then
+            kill -KILL -$BACKEND_PGID 2>/dev/null
+        fi
+    fi
+
+    if [ -n "$FRONTEND_PGID" ]; then
+        echo "🔍 Stopping frontend process group (PGID: $FRONTEND_PGID)..."
+        kill -TERM -$FRONTEND_PGID 2>/dev/null
+        sleep 1
+        if kill -0 -$FRONTEND_PGID 2>/dev/null; then
+            kill -KILL -$FRONTEND_PGID 2>/dev/null
+        fi
+    fi
+
+    # Method 3: Kill parent PIDs (as final backup)
+    if [ -n "$BACKEND_PID" ]; then
+        kill -TERM $BACKEND_PID 2>/dev/null
+        sleep 1
+        if kill -0 $BACKEND_PID 2>/dev/null; then
+            kill -KILL $BACKEND_PID 2>/dev/null
+        fi
+    fi
+
+    if [ -n "$FRONTEND_PID" ]; then
+        kill -TERM $FRONTEND_PID 2>/dev/null
+        sleep 1
+        if kill -0 $FRONTEND_PID 2>/dev/null; then
+            kill -KILL $FRONTEND_PID 2>/dev/null
+        fi
+    fi
+
+    # Final verification
+    sleep 1
+    REMAINING_BACKEND=$(lsof -ti:3001 2>/dev/null)
+    if [ -n "$REMAINING_BACKEND" ]; then
+        echo "⚠️  Warning: Some processes still running on port 3001: $REMAINING_BACKEND"
+        echo "🔍 Force killing all remaining processes..."
+        for pid in $REMAINING_BACKEND; do
+            kill -KILL $pid 2>/dev/null
+        done
+    fi
+
+    # Stop Docker PostgreSQL if used
+    if [ "$USE_DOCKER" = true ]; then
+        docker stop nginx-love-postgres 2>/dev/null && echo "✅ PostgreSQL stopped"
+    fi
+
+    echo "👋 Goodbye!"
+    exit 0
+}
+
+# Trap Ctrl+C (SIGINT) and SIGTERM
+trap cleanup SIGINT SIGTERM
 
 # Keep script running
 wait
