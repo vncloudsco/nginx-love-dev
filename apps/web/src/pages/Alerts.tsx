@@ -36,7 +36,7 @@ const Alerts = () => {
   const [ruleForm, setRuleForm] = useState({
     name: "",
     alertType: "cpu" as "cpu" | "memory" | "disk" | "upstream" | "ssl",
-    condition: "",
+    condition: "cpu > threshold",
     threshold: 80,
     severity: "warning" as "critical" | "warning" | "info",
     channels: [] as string[],
@@ -145,7 +145,7 @@ const Alerts = () => {
     setRuleForm({
       name: "",
       alertType: "cpu",
-      condition: "",
+      condition: "cpu > threshold",
       threshold: 80,
       severity: "warning",
       channels: [],
