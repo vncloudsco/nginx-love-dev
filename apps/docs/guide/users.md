@@ -61,7 +61,7 @@ The platform uses a three-tier role-based access control system:
 **Operational Access** - Manage domains and security settings:
 
 **Domain Management**
-- Create, edit, and delete domains
+- Create, edit not delete domain
 - Configure upstream servers and load balancing
 - Manage SSL certificates
 - Configure ModSecurity rules
@@ -116,11 +116,6 @@ The platform uses a three-tier role-based access control system:
 - **Role**: Admin, Moderator, or Viewer
 - **Password**: Initial password (or auto-generate)
 - **Status**: Active or Inactive
-
-**Optional Information:**
-- **Phone**: Contact phone number
-- **Timezone**: User's timezone (default: Asia/Ho_Chi_Minh)
-- **Language**: Interface language (default: en)
 
 ### Username Requirements
 
@@ -240,59 +235,6 @@ Administrators can require 2FA for specific users:
 3. Disable **Require 2FA**
 4. Click **Save**
 
-#### Regenerate Backup Codes
-
-1. Select the user from the list
-2. Click **Manage 2FA**
-3. Click **Regenerate Backup Codes**
-4. Securely communicate new codes to user
-
-#### Reset 2FA
-
-If a user loses access to their 2FA device:
-
-1. Select the user from the list
-2. Click **Reset 2FA**
-3. Confirm the reset
-4. User will need to set up 2FA again on next login
-
-## Session Management
-
-Monitor and control active user sessions for security.
-
-### Viewing Active Sessions
-
-1. Select a user from the list
-2. Click **View Sessions**
-3. See active sessions with details:
-   - **Session ID**: Unique session identifier
-   - **IP Address**: Login IP address
-   - **Device**: Device type and browser
-   - **Location**: Geographic location (if available)
-   - **Last Active**: Last activity timestamp
-   - **Expires**: Session expiration time
-
-### Revoking Sessions
-
-1. Select the user from the list
-2. Click **View Sessions**
-3. Select the session to revoke
-4. Click **Revoke Session**
-5. Confirm the action
-
-### Force Logout
-
-Immediately log out a user from all devices:
-
-1. Select the user from the list
-2. Click **Force Logout**
-3. Confirm the action
-4. User will need to log in again
-
-## Activity Monitoring
-
-Track user activity for security and compliance.
-
 ### Viewing Activity Logs
 
 1. Select a user from the list
@@ -311,63 +253,6 @@ Track user activity for security and compliance.
 - **User Action**: User management actions
 - **Security**: Security-related events
 
-### Monitoring Security Events
-
-Pay special attention to:
-
-- **Failed Login Attempts**: Potential brute force attacks
-- **Multiple IPs**: Potential account sharing
-- **Unusual Activity**: Actions outside normal patterns
-- **Privilege Escalation**: Role changes or permission modifications
-
-## User Statistics
-
-Monitor user activity and system usage through statistics.
-
-### User Statistics Dashboard
-
-Access user statistics by clicking **Users** and then **Statistics**:
-
-**User Overview**
-- Total users by role
-- Active vs inactive users
-- 2FA adoption rate
-- Recent activity trends
-
-**Login Statistics**
-- Daily/weekly/monthly login counts
-- Failed login attempts
-- Geographic distribution
-- Device and browser statistics
-
-**Activity Statistics**
-- Configuration changes by user
-- Most active users
-- Feature usage patterns
-- Time-based activity analysis
-
-## Best Practices
-
-### User Management
-
-1. **Principle of Least Privilege**: Assign minimum necessary permissions
-2. **Regular Reviews**: Periodically review user roles and permissions
-3. **Account Cleanup**: Remove inactive or unused accounts
-4. **Strong Passwords**: Enforce strong password policies
-
-### Security
-
-1. **Enable 2FA**: Require 2FA for all admin and moderator accounts
-2. **Monitor Activity**: Regularly review user activity logs
-3. **Session Management**: Monitor and manage active sessions
-4. **Failed Login Tracking**: Monitor for suspicious login attempts
-
-### Compliance
-
-1. **Audit Trail**: Maintain complete audit logs
-2. **Data Retention**: Follow data retention policies
-3. **Access Controls**: Implement proper access controls
-4. **Regular Audits**: Conduct regular security audits
 
 ## API Integration
 
@@ -432,86 +317,6 @@ curl -X PATCH http://localhost:3001/api/users/USER_ID/status \
   }'
 ```
 
-## Troubleshooting
-
-### Common User Issues
-
-#### Login Failures
-
-**Symptoms**: User cannot log in with correct credentials
-
-**Possible Causes**:
-- Account is inactive or suspended
-- Password expired or changed
-- 2FA verification failing
-- Account locked due to failed attempts
-
-**Solutions**:
-1. Check user status in user management
-2. Reset user password
-3. Reset 2FA if needed
-4. Check for account lockout
-
-#### Permission Issues
-
-**Symptoms**: User cannot access expected features
-
-**Possible Causes**:
-- Incorrect role assignment
-- Role permissions changed
-- User account issues
-
-**Solutions**:
-1. Verify user role assignment
-2. Check role permissions
-3. Review user account status
-4. Check activity logs for changes
-
-#### 2FA Issues
-
-**Symptoms**: User cannot complete 2FA verification
-
-**Possible Causes**:
-- Time sync issues with authenticator app
-- Lost authenticator device
-- Backup codes lost
-
-**Solutions**:
-1. Check device time synchronization
-2. Reset 2FA for the user
-3. Generate new backup codes
-4. Use alternative 2FA method
-
-### Security Incidents
-
-#### Suspicious Activity
-
-If you detect suspicious user activity:
-
-1. **Immediate Actions**:
-   - Force logout of suspicious user
-   - Reset user password
-   - Revoke all active sessions
-
-2. **Investigation**:
-   - Review activity logs
-   - Check login IP addresses
-   - Verify configuration changes
-
-3. **Prevention**:
-   - Enable 2FA if not already enabled
-   - Review and tighten permissions
-   - Implement additional monitoring
-
-## Conclusion
-
-User management is critical for maintaining system security and proper access controls. By following this guide, you should be able to:
-
-- Create and manage user accounts effectively
-- Implement proper role-based access control
-- Configure Two-Factor Authentication for enhanced security
-- Monitor user activity and manage sessions
-- Troubleshoot common user issues
 
 For more information on related topics:
 - [Domain Management](/guide/domains)

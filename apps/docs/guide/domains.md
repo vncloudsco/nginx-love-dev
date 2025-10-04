@@ -49,14 +49,12 @@ When entering a domain name, follow these guidelines:
 - **Valid Characters**: Letters (a-z), numbers (0-9), hyphens (-)
 - **Cannot Start/End**: Cannot start or end with a hyphen
 - **Subdomains**: Use dot notation for subdomains (e.g., `api.example.com`)
-- **Wildcards**: Wildcard domains are supported (*.example.com)
 
 **Examples of Valid Domain Names:**
 ```
 example.com
 api.example.com
 www.example.com
-*.example.com
 my-app.example.org
 ```
 
@@ -91,7 +89,7 @@ Protocol: HTTP
 Weight: 1
 Max Fails: 3
 Fail Timeout: 10
-SSL Verify: Yes
+SSL Verify: OFF
 ```
 
 #### Multiple Backend Servers (Load Balancing)
@@ -106,11 +104,10 @@ Server 2:
   Port: 8080
   Weight: 2
   
-Server 3 (Backup):
+Server 3:
   Host: 192.168.1.102
   Port: 8080
   Weight: 1
-  Backup: Yes
 ```
 
 #### HTTPS Backend with SSL Verification
@@ -119,7 +116,7 @@ Host: api.backend.com
 Port: 443
 Protocol: HTTPS
 Weight: 1
-SSL Verify: Yes
+SSL Verify: OFF
 ```
 
 ## Load Balancing Configuration
@@ -187,90 +184,6 @@ Path: /health
 Success Criteria: 200, 204
 ```
 
-## Advanced Domain Configuration
-
-### Custom Nginx Configuration
-
-For advanced use cases, you can add custom Nginx configuration directives:
-
-1. Select your domain from the list
-2. Click the **Advanced** tab
-3. Add custom configuration in the text area
-
-#### Example Custom Configuration
-```nginx
-# Custom headers
-add_header X-Frame-Options "SAMEORIGIN" always;
-add_header X-Content-Type-Options "nosniff" always;
-add_header X-XSS-Protection "1; mode=block" always;
-
-# CORS configuration
-if ($request_method = 'OPTIONS') {
-    add_header 'Access-Control-Allow-Origin' '*';
-    add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
-    add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range';
-    add_header 'Access-Control-Max-Age' 1728000;
-    add_header 'Content-Type' 'text/plain; charset=utf-8';
-    add_header 'Content-Length' 0;
-    return 204;
-}
-
-# Rate limiting
-limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-limit_req zone=api burst=20 nodelay;
-```
-
-### URL Rewriting and Redirects
-
-Configure URL rewriting and redirects for your domain:
-
-#### Permanent Redirect (301)
-```nginx
-# Redirect old domain to new domain
-server_name old-domain.com;
-return 301 $scheme://new-domain.com$request_uri;
-```
-
-#### Temporary Redirect (302)
-```nginx
-# Temporary maintenance redirect
-return 302 /maintenance.html;
-```
-
-#### URL Rewriting
-```nginx
-# Rewrite rules
-location /old-path/ {
-    rewrite ^/old-path/(.*)$ /new-path/$1 permanent;
-}
-```
-
-## Domain Status and Monitoring
-
-### Domain Status Indicators
-
-Each domain displays status indicators:
-
-- **Active**: Domain is online and accepting traffic
-- **Inactive**: Domain is disabled and not accepting traffic
-- **Error**: Domain has configuration errors or all upstreams are down
-
-### Upstream Server Status
-
-Upstream servers show individual health status:
-
-- **Up**: Server is healthy and accepting traffic
-- **Down**: Server is not responding or has failed health checks
-- **Checking**: Health check is in progress
-
-### Domain Performance Metrics
-
-Monitor domain performance through the **Performance** tab:
-
-- **Request Rate**: Requests per second
-- **Response Time**: Average response time
-- **Error Rate**: Percentage of failed requests
-- **Bandwidth**: Data transfer statistics
 
 ## Domain Operations
 
@@ -304,63 +217,6 @@ After making changes to domain configuration, you may need to reload Nginx:
 1. Click the **Reload Nginx** button in the domain list
 2. Or use the system-wide reload in **System** settings
 
-## Troubleshooting Domain Issues
-
-### Common Issues and Solutions
-
-#### Domain Not Accessible
-
-**Symptoms**: 502 Bad Gateway, connection refused
-
-**Possible Causes**:
-- All upstream servers are down
-- Incorrect upstream configuration
-- Network connectivity issues
-
-**Solutions**:
-1. Check upstream server status
-2. Verify host and port configuration
-3. Test connectivity to upstream servers
-4. Check firewall rules
-
-#### SSL Certificate Issues
-
-**Symptoms**: SSL warnings, certificate errors
-
-**Possible Causes**:
-- Expired SSL certificate
-- Incorrect certificate configuration
-- Domain mismatch
-
-**Solutions**:
-1. Check SSL certificate validity
-2. Verify certificate matches domain
-3. Renew or reissue certificate
-4. Check certificate chain
-
-#### Load Balancing Not Working
-
-**Symptoms**: All traffic going to one server
-
-**Possible Causes**:
-- Incorrect load balancing algorithm
-- Server weights not configured
-- Health checks failing
-
-**Solutions**:
-1. Verify load balancing algorithm
-2. Check server weights
-3. Review health check configuration
-4. Monitor server health status
-
-### Debug Mode
-
-Enable debug mode for detailed logging:
-
-1. Go to **System** settings
-2. Enable **Debug Mode**
-3. Check logs in **Logs** section
-4. Disable debug mode when finished
 
 ## Best Practices
 
