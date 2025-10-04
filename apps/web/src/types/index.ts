@@ -7,6 +7,7 @@ export interface Domain {
   modsecEnabled: boolean;
   upstreams: Upstream[];
   loadBalancer: LoadBalancerConfig;
+  sslCertificate?: SSLCertificate | null;
   createdAt: string;
   lastModified: string;
 }
@@ -243,4 +244,20 @@ export interface PasswordChange {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
+}
+
+export interface Pagination {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+  pagination?: Pagination;
 }

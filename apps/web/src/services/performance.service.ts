@@ -25,19 +25,28 @@ export const performanceService = {
    * @param timeRange - Time range: 5m, 15m, 1h, 6h, 24h
    */
   async getMetrics(domain: string = 'all', timeRange: string = '1h'): Promise<PerformanceMetric[]> {
-    const response = await api.get<{ success: boolean; data: any[] }>(
-      `/performance/metrics?domain=${domain}&timeRange=${timeRange}`
-    );
-    
-    return response.data.data.map((metric: any) => ({
-      id: metric.id || `${metric.domain}-${metric.timestamp}`,
-      domain: metric.domain,
-      timestamp: metric.timestamp,
-      responseTime: metric.responseTime,
-      throughput: metric.throughput,
-      errorRate: metric.errorRate,
-      requestCount: metric.requestCount
-    }));
+    try {
+      const response = await api.get<{ success: boolean; data: any[] }>(
+        `/performance/metrics?domain=${domain}&timeRange=${timeRange}`
+      );
+      
+      // Check if response.data.data is an array before mapping
+      if (!Array.isArray(response.data.data)) {
+        return []; // Return empty array as fallback
+      }
+      
+      return response.data.data.map((metric: any) => ({
+        id: metric.id || `${metric.domain}-${metric.timestamp}`,
+        domain: metric.domain,
+        timestamp: metric.timestamp,
+        responseTime: metric.responseTime,
+        throughput: metric.throughput,
+        errorRate: metric.errorRate,
+        requestCount: metric.requestCount
+      }));
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
@@ -46,11 +55,14 @@ export const performanceService = {
    * @param timeRange - Time range: 5m, 15m, 1h, 6h, 24h
    */
   async getStats(domain: string = 'all', timeRange: string = '1h'): Promise<PerformanceStats> {
-    const response = await api.get<{ success: boolean; data: PerformanceStats }>(
-      `/performance/stats?domain=${domain}&timeRange=${timeRange}`
-    );
-    
-    return response.data.data;
+    try {
+      const response = await api.get<{ success: boolean; data: PerformanceStats }>(
+        `/performance/stats?domain=${domain}&timeRange=${timeRange}`
+      );
+      return response.data.data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
@@ -59,19 +71,28 @@ export const performanceService = {
    * @param limit - Number of records to fetch
    */
   async getHistory(domain: string = 'all', limit: number = 100): Promise<PerformanceMetric[]> {
-    const response = await api.get<{ success: boolean; data: any[] }>(
-      `/performance/history?domain=${domain}&limit=${limit}`
-    );
-    
-    return response.data.data.map((metric: any) => ({
-      id: metric.id,
-      domain: metric.domain,
-      timestamp: metric.timestamp,
-      responseTime: metric.responseTime,
-      throughput: metric.throughput,
-      errorRate: metric.errorRate,
-      requestCount: metric.requestCount
-    }));
+    try {
+      const response = await api.get<{ success: boolean; data: any[] }>(
+        `/performance/history?domain=${domain}&limit=${limit}`
+      );
+      
+      // Check if response.data.data is an array before mapping
+      if (!Array.isArray(response.data.data)) {
+        return []; // Return empty array as fallback
+      }
+      
+      return response.data.data.map((metric: any) => ({
+        id: metric.id,
+        domain: metric.domain,
+        timestamp: metric.timestamp,
+        responseTime: metric.responseTime,
+        throughput: metric.throughput,
+        errorRate: metric.errorRate,
+        requestCount: metric.requestCount
+      }));
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
