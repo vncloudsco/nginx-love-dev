@@ -217,37 +217,6 @@ After making changes to domain configuration, you may need to reload Nginx:
 1. Click the **Reload Nginx** button in the domain list
 2. Or use the system-wide reload in **System** settings
 
-
-## Best Practices
-
-### Domain Configuration
-
-1. **Use Descriptive Names**: Make domain names clear and descriptive
-2. **Organize by Environment**: Separate production, staging, and development domains
-3. **Document Configuration**: Keep records of special configurations
-4. **Regular Backups**: Backup domain configurations regularly
-
-### Upstream Server Management
-
-1. **Multiple Servers**: Always configure at least two upstream servers for redundancy
-2. **Health Checks**: Enable health checks for all production domains
-3. **Weight Distribution**: Use appropriate weights based on server capacity
-4. **Backup Servers**: Configure backup servers for high availability
-
-### Security
-
-1. **SSL Everywhere**: Enable SSL for all production domains
-2. **ModSecurity**: Enable WAF protection for all public-facing domains
-3. **Access Control**: Use ACLs to restrict access as needed
-4. **Regular Updates**: Keep SSL certificates and security rules updated
-
-### Performance
-
-1. **Monitor Metrics**: Regularly check performance metrics
-2. **Optimize Configuration**: Tune settings based on traffic patterns
-3. **Load Testing**: Test configuration under load
-4. **Capacity Planning**: Plan for growth and scale accordingly
-
 ## API Integration
 
 For programmatic domain management, use the REST API:
@@ -301,15 +270,7 @@ curl -X DELETE http://localhost:3001/api/domains/DOMAIN_ID \
 
 For complete API documentation, see the [API Reference](/api/domains).
 
-## Conclusion
 
-Domain management is a core feature of the Nginx WAF Management Platform. By following this guide, you should be able to:
-
-- Add and configure domains effectively
-- Set up reliable load balancing
-- Monitor domain performance
-- Troubleshoot common issues
-- Implement best practices for production use
 
 For more information on related topics:
 - [SSL Certificate Management](/guide/ssl)

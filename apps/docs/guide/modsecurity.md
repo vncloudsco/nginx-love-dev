@@ -365,15 +365,6 @@ curl -X DELETE http://localhost:3001/api/modsec/rules/RULE_ID \
 
 For complete API documentation, see the [API Reference](/api/modsecurity).
 
-## Conclusion
-
-ModSecurity WAF is a powerful tool for protecting your web applications. By following this guide, you should be able to:
-
-- Configure ModSecurity for optimal protection
-- Manage OWASP CRS rules effectively
-- Create custom security rules
-- Monitor and analyze security events
-- Troubleshoot common WAF issues
 
 For more information on related topics:
 - [Domain Management](/guide/domains)

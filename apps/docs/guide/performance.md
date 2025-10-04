@@ -327,15 +327,7 @@ curl -X DELETE http://localhost:3001/api/performance/cleanup \
 3. **Scale Proactively**: Scale resources before issues occur
 4. **Document Decisions**: Document scaling decisions and rationale
 
-## Conclusion
 
-Performance monitoring is essential for maintaining system health and optimizing user experience. By following this guide, you should be able to:
-
-- Monitor system and domain performance effectively
-- Configure alerts for performance issues
-- Analyze performance trends and identify bottlenecks
-- Optimize system performance based on data
-- Plan for future capacity needs
 
 For more information on related topics:
 - [Domain Management](/guide/domains)

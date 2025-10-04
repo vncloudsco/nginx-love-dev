@@ -189,15 +189,6 @@ curl -X GET "http://localhost:3001/api/logs/download?type=error&format=json" \
 3. **Capacity Planning**: Use logs for capacity planning
 4. **Optimization**: Optimize based on log analysis
 
-## Conclusion
-
-Log analysis is essential for maintaining system security, performance, and reliability. By following this guide, you should be able to:
-
-- View and filter different types of logs
-- Search for specific log entries
-- Analyze access patterns and security events
-- Troubleshoot issues using log data
-- Export logs for external analysis
 
 For more information on related topics:
 - [Domain Management](/guide/domains)

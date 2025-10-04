@@ -150,14 +150,11 @@ The automatic renewal process:
 3. **Certificate Request**: New certificate is requested from Let's Encrypt
 4. **Validation**: Domain ownership is validated
 5. **Installation**: New certificate is installed
-6. **Notification**: Success/failure notification is sent
 
 ### Renewal Notifications
 
 Configure notifications for renewal events:
 
-- **Success Notifications**: Certificate renewed successfully
-- **Failure Notifications**: Renewal failed, manual intervention required
 - **Expiry Warnings**: Certificate expiring soon (if auto-renewal fails)
 
 ## API Integration
@@ -210,15 +207,7 @@ curl -X DELETE http://localhost:3001/api/ssl/CERTIFICATE_ID \
 
 For complete API documentation, see the [API Reference](/api/ssl).
 
-## Conclusion
 
-SSL certificate management is crucial for securing your web applications. By following this guide, you should be able to:
-
-- Configure Let's Encrypt certificates automatically
-- Upload and manage custom certificates
-- Set up automatic renewal with monitoring
-- Troubleshoot common SSL issues
-- Implement SSL best practices
 
 For more information on related topics:
 - [Domain Management](/guide/domains)
