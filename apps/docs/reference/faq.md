@@ -20,7 +20,7 @@ nginx waf requires:
 
 ### Is nginx waf free?
 
-Yes, nginx waf is open-source and released under the MIT License.
+Yes, nginx waf is open-source and released under the Apache-2.0 license.
 
 ### Can I use nginx waf in production?
 
@@ -32,25 +32,10 @@ Yes, nginx waf is designed for production use. However, always test in a staging
 
 See the [installation guide](/guide/installation) for detailed installation instructions.
 
-### Can I install nginx waf on Docker?
 
-Yes, nginx waf provides Docker images for easy deployment. See the installation guide for Docker instructions.
-
-### Do I need to install Nginx separately?
-
-Yes, nginx waf manages existing Nginx installations but does not include Nginx itself.
 
 ## Domain Management Questions
 
 ### Can I manage multiple domains?
 
 Yes, nginx waf is designed to manage multiple domains from a single interface.
-
-### Can I use nginx waf with existing Nginx configurations?
-
-Yes, nginx waf can import existing Nginx configurations. However, some manual adjustments may be needed.
-
-### Can I create custom Nginx configurations?
-
-Yes, nginx waf allows you to add custom Nginx directives for advanced configurations.
-
