@@ -1,10 +1,10 @@
 # Configuration
 
-This section covers the configuration options available in nginx-love.
+This section covers the configuration options available in nginx waf.
 
 ## Environment Variables
 
-nginx-love can be configured using environment variables. These can be set in a `.env` file or directly in the environment.
+nginx waf can be configured using environment variables. These can be set in a `.env` file or directly in the environment.
 
 ### Database Configuration
 

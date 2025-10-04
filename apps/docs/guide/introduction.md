@@ -15,7 +15,7 @@ nginx-love is designed to simplify the management of Nginx web servers with the 
 
 ## Who is this for?
 
-nginx-love is designed for:
+ngNginx WAF is designed for:
 
 - System administrators managing multiple Nginx instances
 - DevOps engineers looking for a centralized Nginx management solution
@@ -25,18 +25,18 @@ nginx-love is designed for:
 ## Key Concepts
 
 ### Domains
-In nginx-love, a domain represents a website or application served by Nginx. Each domain has its own configuration, SSL certificates, and settings.
+In Nginx WAF, a domain represents a website or application served by Nginx. Each domain has its own configuration, SSL certificates, and settings.
 
 ### SSL Certificates
-nginx-love integrates with Let's Encrypt to provide free SSL certificates. It automates the process of obtaining, renewing, and installing certificates.
+Nginx WAF integrates with Let's Encrypt to provide free SSL certificates. It automates the process of obtaining, renewing, and installing certificates.
 
 ### ModSecurity
-ModSecurity is a web application firewall that helps protect your applications from various attacks. nginx-love provides an interface to manage ModSecurity rules and configurations.
+ModSecurity is a web application firewall that helps protect your applications from various attacks. Nginx WAF provides an interface to manage ModSecurity rules and configurations.
 
 ### Performance Monitoring
-nginx-love collects and displays performance metrics for your Nginx servers, helping you identify bottlenecks and optimize performance.
+Nginx WAF collects and displays performance metrics for your Nginx servers, helping you identify bottlenecks and optimize performance.
 
 ## Next Steps
 
-- [Installation Guide](/guide/installation) - Learn how to install nginx-love
+- [Installation Guide](/guide/installation) - Learn how to install Nginx WAF
 - [Quick Start](/guide/quick-start) - Get up and running quickly

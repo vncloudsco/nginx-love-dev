@@ -93,7 +93,7 @@ System logs record application and system events:
 
 **Log Format**:
 ```
-2025-10-04T10:00:00.000Z [INFO] (nginx-love-api) User admin logged in successfully from 192.168.1.100
+2025-10-04T10:00:00.000Z [INFO] (nginx-waf-api) User admin logged in successfully from 192.168.1.100
 ```
 
 **System Log Fields**:

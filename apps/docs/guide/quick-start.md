@@ -414,4 +414,4 @@ The installation wizard will show a completion screen when all components are su
 
 ![Installation Complete](/reference/screenshots/installation_complete.png)
 
-Your nginx-love platform is now ready for production use!
+Your Nginx WAF platform is now ready for production use!
