@@ -4,6 +4,7 @@ export default defineConfig({
   title: 'nginx-love Documentation',
   description: 'Enterprise Nginx + ModSecurity Management Platform',
   lang: 'en-US',
+  base: '/nginx-love/',
   
   // Theme appearance
   appearance: 'dark',
@@ -201,6 +202,12 @@ export default defineConfig({
       }
     }
   },
+
+  // Ignore dead links configuration
+  ignoreDeadLinks: [
+    /^http:\/\/localhost/,
+    /^http:\/\/YOUR_IP/
+  ],
 
   // Markdown configuration
   markdown: {
