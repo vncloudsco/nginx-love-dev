@@ -106,7 +106,7 @@ The platform uses a three-tier role-based access control system:
 ### Add a New User
 
 1. Click **Users** in the sidebar
-2. Click the **Add User** button
+2. Click the **Invite User** button
 3. Fill in the user details:
 
 **Required Information:**
@@ -164,17 +164,9 @@ Quickly enable or disable user accounts:
 **Status Types:**
 - **Active**: User can log in and access the system
 - **Inactive**: User cannot log in (account disabled)
-- **Suspended**: User account suspended (admin only)
 
 ### Resetting User Passwords
-
-1. Select the user from the list
-2. Click the **Reset Password** button
-3. Choose reset option:
-   - **Auto-generate**: System generates a secure password
-   - **Manual**: Specify a new password
-4. Click **Reset Password**
-5. Communicate the new password to the user
+in development
 
 ### Deleting Users
 
@@ -183,9 +175,6 @@ Quickly enable or disable user accounts:
 1. Select the user from the list
 2. Click the **Delete** button
 3. Confirm the deletion
-4. Choose what to do with user data:
-   - **Delete**: Remove all user data
-   - **Archive**: Archive user data for compliance
 
 ## Two-Factor Authentication (2FA)
 
@@ -198,10 +187,6 @@ Two-Factor Authentication adds an extra layer of security by requiring a second 
 - **Setup**: QR code or manual entry
 - **Backup Codes**: Generated for recovery
 
-#### Email-Based 2FA
-- **Method**: One-time code sent to email
-- **Expiration**: Codes expire after 10 minutes
-- **Rate Limiting**: Prevents email flooding
 
 ### Setting Up 2FA for Users
 
@@ -210,23 +195,12 @@ Two-Factor Authentication adds an extra layer of security by requiring a second 
 1. Log in to the user account
 2. Navigate to **Profile** settings
 3. Click **Enable 2FA**
-4. Choose 2FA method (TOTP recommended)
+4. Choose 2FA method only Authenticator App
 5. Follow the setup instructions:
    - Scan QR code with authenticator app
    - Enter verification code
    - Save backup codes securely
 
-#### Admin-Forced 2FA
-
-Administrators can require 2FA for specific users:
-
-1. Select the user from the list
-2. Click **Edit** button
-3. Enable **Require 2FA**
-4. Choose grace period for setup
-5. Click **Save**
-
-### Managing 2FA
 
 #### Disable 2FA
 
@@ -254,68 +228,6 @@ Administrators can require 2FA for specific users:
 - **Security**: Security-related events
 
 
-## API Integration
-
-For programmatic user management, use the REST API:
-
-### List Users
-```bash
-curl -X GET http://localhost:3001/api/users \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Create User
-```bash
-curl -X POST http://localhost:3001/api/users \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "newuser",
-    "email": "newuser@example.com",
-    "fullName": "New User",
-    "role": "moderator",
-    "password": "SecurePassword123!",
-    "status": "active"
-  }'
-```
-
-### Update User
-```bash
-curl -X PUT http://localhost:3001/api/users/USER_ID \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "fullName": "Updated Name",
-    "email": "updated@example.com",
-    "role": "admin"
-  }'
-```
-
-### Delete User
-```bash
-curl -X DELETE http://localhost:3001/api/users/USER_ID \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Reset Password
-```bash
-curl -X POST http://localhost:3001/api/users/USER_ID/reset-password \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "newPassword": "NewSecurePassword123!"
-  }'
-```
-
-### Toggle User Status
-```bash
-curl -X PATCH http://localhost:3001/api/users/USER_ID/status \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "status": "inactive"
-  }'
-```
 
 
 For more information on related topics:

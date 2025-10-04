@@ -99,9 +99,10 @@ System logs record application and system events:
 **System Log Fields**:
 - **Timestamp**: Event date and time (ISO 8601)
 - **Log Level**: Event severity (INFO, WARN, ERROR, DEBUG)
-- **Component**: System component generating the log
+- **Source**: System component generating the log
 - **Message**: Event description
-- **Metadata**: Additional event data
+- **Details**: Additional event data
+- **Domain**: domain log
 
 ## Viewing Logs
 
@@ -122,7 +123,6 @@ Filter logs to find specific information:
    - **Error**: Error messages and critical issues
    - **Warning**: Warning messages and potential issues
    - **Info**: Informational messages
-   - **Debug**: Debug messages (verbose)
 
 
 ### Searching Logs
@@ -137,57 +137,6 @@ search term
 ```
 
 
-## API Integration
-
-For programmatic log access, use the REST API:
-
-### Get Logs
-```bash
-curl -X GET "http://localhost:3001/api/logs?type=access&domain=example.com&limit=100" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Get Log Statistics
-```bash
-curl -X GET "http://localhost:3001/api/logs/stats?type=modsecurity&timeframe=24h" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Get Available Domains
-```bash
-curl -X GET http://localhost:3001/api/logs/domains \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Download Logs
-```bash
-curl -X GET "http://localhost:3001/api/logs/download?type=error&format=json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -o logs.json
-```
-
-## Best Practices
-
-### Log Management
-
-1. **Regular Review**: Regularly review logs for issues
-2. **Proactive Monitoring**: Set up alerts for critical log events
-3. **Log Retention**: Implement appropriate log retention policies
-4. **Log Security**: Secure log files and limit access
-
-### Security Analysis
-
-1. **Threat Detection**: Use logs to detect security threats
-2. **Incident Response**: Use logs for incident response
-3. **Forensics**: Maintain logs for forensic analysis
-4. **Compliance**: Ensure logs meet compliance requirements
-
-### Performance Optimization
-
-1. **Bottleneck Identification**: Use logs to identify performance bottlenecks
-2. **Trend Analysis**: Analyze performance trends over time
-3. **Capacity Planning**: Use logs for capacity planning
-4. **Optimization**: Optimize based on log analysis
 
 
 For more information on related topics:
