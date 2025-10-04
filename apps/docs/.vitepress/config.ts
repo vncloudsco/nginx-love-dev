@@ -4,7 +4,6 @@ export default defineConfig({
   title: 'Nginx WAF Documentation',
   description: 'Enterprise Nginx + ModSecurity Management Platform',
   lang: 'en-US',
-  base: '/nginx-love/',
   
   // Theme appearance
   appearance: 'dark',
