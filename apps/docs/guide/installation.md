@@ -235,40 +235,6 @@ cd apps/api && pnpm start &
 cd ../web && pnpm preview &
 ```
 
----
-
-## Docker Installation
-
-For containerized deployments, use Docker Compose:
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/TinyActive/nginx-love.git
-cd nginx-love
-```
-
-### 2. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-### 3. Start with Docker Compose
-
-```bash
-# Start all services
-docker-compose up -d
-
-# Check status
-docker-compose ps
-
-# View logs
-docker-compose logs -f
-```
-
----
 
 ## Default Login Credentials
 
@@ -297,56 +263,6 @@ sudo ufw allow 8080/tcp    # Frontend (if not behind proxy)
 sudo ufw enable
 ```
 
-### 2. SSL Certificate Setup
-
-For production use, configure SSL certificates:
-
-```bash
-# Option 1: Let's Encrypt (recommended)
-sudo apt install certbot
-sudo certbot --nginx -d yourdomain.com
-
-# Option 2: Self-signed (for testing)
-sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout /etc/ssl/private/nginx-selfsigned.key \
-  -out /etc/ssl/certs/nginx-selfsigned.crt
-```
-
-### 3. Nginx Reverse Proxy (Optional)
-
-Configure Nginx as a reverse proxy:
-
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name yourdomain.com;
-
-    ssl_certificate /path/to/your/certificate.crt;
-    ssl_certificate_key /path/to/your/private.key;
-
-    location / {
-        proxy_pass http://localhost:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /api {
-        proxy_pass http://localhost:3001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
 
 ---
 
@@ -436,9 +352,7 @@ Open your browser and navigate to:
 - Development: http://localhost:8080
 - Production: http://YOUR_IP:8080
 
-### 3. Test API Documentation
 
-Visit http://localhost:3001/api-docs to view the Swagger documentation.
 
 ---
 
