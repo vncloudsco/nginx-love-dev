@@ -21,10 +21,10 @@ Access SSL management by:
 ![SSL Certificate](/reference/screenshots/ssl_cert.png)
 
 The SSL interface provides:
-- **Certificate Status**: Visual indicators for certificate validity
-- **Certificate Details**: Complete certificate information
-- **Renewal Settings**: Auto-renewal configuration
-- **Quick Actions**: Common SSL operations
+- ** Status**: Visual indicators for certificate validity
+- **Valid From**: Date of creation certificate information
+- **Valid To**: Expired ssl
+- **Actions**: Delete SSL 
 
 ## Let's Encrypt Certificates
 
