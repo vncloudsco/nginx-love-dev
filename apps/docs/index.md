@@ -1,7 +1,7 @@
 ---
 layout: home
 hero:
-  name: nginx-love
+  name: Nginx WAF
   text: Nginx + ModSecurity Management Platform
   tagline: A comprehensive platform for managing Nginx configurations, SSL certificates, and ModSecurity rules
   actions:
