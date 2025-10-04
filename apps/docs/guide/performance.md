@@ -53,25 +53,7 @@ Configure alerts to notify you of performance issues:
    Condition: cpu > 80
    Threshold: 80%
    Severity: Warning
-   Check Interval: 300 seconds (5 minutes)
-   ```
-
-2. **Slow Response Time**:
-   ```
-   Name: Slow Response Time
-   Condition: response_time > 1000
-   Threshold: 1000ms
-   Severity: Warning
-   Check Interval: 60 seconds (1 minute)
-   ```
-
-3. **High Error Rate**:
-   ```
-   Name: High Error Rate
-   Condition: error_rate > 5
-   Threshold: 5%
-   Severity: Critical
-   Check Interval: 60 seconds (1 minute)
+   Check Interval: 10 seconds (5 minutes)
    ```
 
 ### Notification Channels
@@ -101,63 +83,6 @@ Configure how alerts are delivered:
 - **Bot Token**: Telegram bot token
 - **Chat ID**: Telegram chat ID for notifications
 
-### Alert Management
-
-
-## Performance Optimization
-
-
-#### CPU Bottlenecks
-
-**Symptoms**:
-- High CPU utilization (>80%)
-- Slow response times
-- High load averages
-
-**Solutions**:
-- Optimize application code
-- Enable caching
-- Scale horizontally (add more servers)
-- Upgrade CPU resources
-
-#### Memory Bottlenecks
-
-**Symptoms**:
-- High memory utilization (>80%)
-- Swap usage
-- Out-of-memory errors
-
-**Solutions**:
-- Optimize memory usage
-- Increase memory allocation
-- Fix memory leaks
-- Implement memory caching
-
-#### Network Bottlenecks
-
-**Symptoms**:
-- High network latency
-- Packet loss
-- Low throughput
-
-**Solutions**:
-- Optimize network configuration
-- Increase bandwidth
-- Implement CDN
-- Optimize application protocols
-
-#### Disk Bottlenecks
-
-**Symptoms**:
-- High disk I/O wait
-- Slow disk operations
-- Low disk space
-
-**Solutions**:
-- Optimize disk usage
-- Implement disk caching
-- Upgrade to faster storage
-- Clean up unnecessary files
 
 
 For more information on related topics:

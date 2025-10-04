@@ -37,7 +37,6 @@ Before requesting a Let's Encrypt certificate, ensure:
 1. **Domain DNS**: Your domain must point to this server's IP address
 2. **Port 80 Access**: Port 80 must be accessible for domain validation
 3. **Email Address**: Valid email for certificate notifications
-4. **Domain Ownership**: You must control the domain
 
 ### Requesting a Let's Encrypt Certificate
 

@@ -303,67 +303,7 @@ SecRule TX:ANOMALY_SCORE "@gt %{tx.anomaly_score_threshold}" \
 ```
 
 
-## API Integration
 
-For programmatic ModSecurity management, use the REST API:
-
-### List CRS Rules
-```bash
-curl -X GET http://localhost:3001/api/modsec/crs-rules \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Toggle CRS Rule
-```bash
-curl -X PATCH http://localhost:3001/api/modsec/crs/rules/RULE_FILE/toggle \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "enabled": false
-  }'
-```
-
-### List Custom Rules
-```bash
-curl -X GET http://localhost:3001/api/modsec/rules \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### Create Custom Rule
-```bash
-curl -X POST http://localhost:3001/api/modsec/rules \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Block SQL Injection",
-    "category": "Security",
-    "ruleContent": "SecRule ARGS \"@detectSQLi\" \"id:1001,phase:2,block,msg:\"SQL Injection Attack Detected\"\"",
-    "description": "Blocks SQL injection attempts",
-    "enabled": true
-  }'
-```
-
-### Update Custom Rule
-```bash
-curl -X PUT http://localhost:3001/api/modsec/rules/RULE_ID \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Block SQL Injection",
-    "category": "Security",
-    "ruleContent": "SecRule ARGS \"@detectSQLi\" \"id:1001,phase:2,block,msg:\"SQL Injection Attack Detected\"\"",
-    "description": "Blocks SQL injection attempts",
-    "enabled": false
-  }'
-```
-
-### Delete Custom Rule
-```bash
-curl -X DELETE http://localhost:3001/api/modsec/rules/RULE_ID \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-For complete API documentation, see the [API Reference](/api/modsecurity).
 
 
 For more information on related topics:
