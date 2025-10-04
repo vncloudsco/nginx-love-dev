@@ -1,10 +1,10 @@
 # Introduction
 
-nginx-love is a comprehensive management platform for Nginx and ModSecurity. It provides a user-friendly web interface to manage Nginx configurations, SSL certificates, ModSecurity rules, and monitor server performance.
+Nginx waf is a comprehensive management platform for Nginx and ModSecurity. It provides a user-friendly web interface to manage Nginx configurations, SSL certificates, ModSecurity rules, and monitor server performance.
 
-## What is nginx-love?
+## What is nginx waf?
 
-nginx-love is designed to simplify the management of Nginx web servers with the following key features:
+Nginx waf is designed to simplify the management of Nginx web servers with the following key features:
 
 - **Domain Management**: Easily add, configure, and manage Nginx domains
 - **SSL Certificate Management**: Automate SSL certificate issuance and renewal with Let's Encrypt
@@ -15,7 +15,7 @@ nginx-love is designed to simplify the management of Nginx web servers with the 
 
 ## Who is this for?
 
-ngNginx WAF is designed for:
+Nginx WAF is designed for:
 
 - System administrators managing multiple Nginx instances
 - DevOps engineers looking for a centralized Nginx management solution
