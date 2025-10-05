@@ -159,7 +159,6 @@ export default function Login() {
 
             {!requires2FA && (
               <p className="text-xs text-center text-muted-foreground mt-4">
-                Demo credentials: <code className="bg-muted px-1 py-0.5 rounded">admin / Admin@123</code>
               </p>
             )}
           </form>
