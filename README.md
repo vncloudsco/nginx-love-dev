@@ -2,6 +2,11 @@
 
 Comprehensive Nginx management system with ModSecurity WAF, Domain Management, SSL Certificates and Real-time Monitoring.
 
+<a href="https://www.producthunt.com/products/waf-advanced-nginx-management-platform?embed=true&utm_source=badge-featured&utm_medium=badge&utm_source=badge-waf-advanced-nginx-management-platform" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1023177&theme=light&t=1759655841567" alt="Nginx WAF - Advanced Nginx Management Platform | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+
+
+
+
 Recommendations: The software is developed with the support of AI so it cannot be absolutely secure, so please protect the Portal and API with a firewall to ensure safety. If you find any problems, please notify us and we will handle it..
 
 ## ✨ Key Features
