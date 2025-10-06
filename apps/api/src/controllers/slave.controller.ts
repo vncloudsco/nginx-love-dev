@@ -67,7 +67,7 @@ async function collectCurrentConfig() {
       modsecEnabled: d.modsecEnabled,
       upstreams: d.upstreams,
       loadBalancer: d.loadBalancer,
-      sslCertificateId: d.sslCertificateId
+      sslCertificate: d.sslCertificate
     })),
     ssl: ssl.map(s => ({
       id: s.id,
