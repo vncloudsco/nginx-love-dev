@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Server, RefreshCw, Trash2, CheckCircle2, XCircle, Clock, AlertCircle, Loader2, Power, Link as LinkIcon, KeyRound } from "lucide-react";
+import { Server, RefreshCw, Trash2, CheckCircle2, XCircle, Clock, AlertCircle, Loader2, Link as LinkIcon, KeyRound } from "lucide-react";
 import { SlaveNode } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { slaveNodesQueryOptions } from "@/queries/slave.query-options";
@@ -173,6 +173,26 @@ const SlaveNodes = () => {
     }
   });
 
+  // Sync from master mutation (slave pulls config)
+  const syncFromMasterMutation = useMutation({
+    mutationFn: systemConfigService.syncWithMaster,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      
+      toast({
+        title: "Sync completed",
+        description: `${data.data.changesApplied} changes applied from master`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync failed",
+        description: error.response?.data?.message || "Failed to sync with master",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: slaveNodeService.delete,
@@ -184,45 +204,6 @@ const SlaveNodes = () => {
       toast({
         title: "Delete failed",
         description: error.response?.data?.message || "Failed to delete node",
-        variant: "destructive"
-      });
-    }
-  });
-
-  // Sync mutation
-  const syncMutation = useMutation({
-    mutationFn: ({ id, force }: { id: string; force?: boolean }) => 
-      slaveNodeService.syncToNode(id, { force }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['slave-nodes'] });
-      const message = data.data?.skipped 
-        ? "Configuration already up to date" 
-        : `Synced ${data.data?.changesCount || 0} changes in ${data.data?.duration || 0}ms`;
-      toast({ title: "Sync completed", description: message });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Sync failed",
-        description: error.response?.data?.message || "Failed to sync configuration",
-        variant: "destructive"
-      });
-    }
-  });
-
-  // Sync all mutation
-  const syncAllMutation = useMutation({
-    mutationFn: slaveNodeService.syncToAll,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['slave-nodes'] });
-      toast({ 
-        title: "Sync to all nodes completed",
-        description: `${data.data.success}/${data.data.total} nodes synced successfully`
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Sync all failed",
-        description: error.response?.data?.message || "Failed to sync to all nodes",
         variant: "destructive"
       });
     }
@@ -278,14 +259,6 @@ const SlaveNodes = () => {
       masterPort: 3001,
       masterApiKey: ""
     });
-  };
-
-  const handleSync = (nodeId: string) => {
-    syncMutation.mutate({ id: nodeId, force: false });
-  };
-
-  const handleSyncAll = () => {
-    syncAllMutation.mutate();
   };
 
   const handleDelete = (id: string) => {
@@ -416,23 +389,10 @@ const SlaveNodes = () => {
                 <div>
                   <h3 className="font-medium">Registered Slave Nodes</h3>
                   <p className="text-sm text-muted-foreground">
-                    {nodes.length} slave node(s) registered
+                    {nodes.length} slave node(s) registered - Slaves will pull config automatically
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleSyncAll}
-                    disabled={syncAllMutation.isPending || nodes.length === 0}
-                  >
-                    {syncAllMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    Sync All
-                  </Button>
                   <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
                       <Button size="sm">
@@ -542,14 +502,6 @@ const SlaveNodes = () => {
                             {node.configHash?.substring(0, 12) || 'N/A'}...
                           </TableCell>
                           <TableCell className="text-right space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleSync(node.id)}
-                              disabled={syncMutation.isPending}
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"
@@ -679,6 +631,18 @@ const SlaveNodes = () => {
                           )}
                         </div>
                         <div className="flex gap-2 pt-2">
+                          <Button
+                            size="sm"
+                            onClick={() => syncFromMasterMutation.mutate()}
+                            disabled={syncFromMasterMutation.isPending}
+                          >
+                            {syncFromMasterMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                            )}
+                            Sync from Master
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"

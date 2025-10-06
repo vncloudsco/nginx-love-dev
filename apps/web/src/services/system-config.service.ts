@@ -85,4 +85,21 @@ export const systemConfigService = {
     );
     return response.data;
   },
+
+  /**
+   * Sync configuration from master (slave pulls config)
+   */
+  syncWithMaster: async (): Promise<ApiResponse<{
+    changesApplied: number;
+    lastSyncAt: string;
+  }>> => {
+    const response = await axios.post(
+      `${API_URL}/system-config/sync`,
+      {},
+      {
+        headers: getHeaders(),
+      }
+    );
+    return response.data;
+  },
 };
