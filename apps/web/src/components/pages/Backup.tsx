@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,17 +7,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Download, Upload, Play, Trash2, Calendar, FileArchive, Database } from "lucide-react";
-import { mockBackups } from "@/mocks/data";
-import { BackupConfig } from "@/types";
+import { Download, Upload, Play, Trash2, Calendar, FileArchive, Database, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { UnderConstructionBanner } from "@/components/ui/under-construction-banner";
+import { backupService, BackupSchedule } from "@/services/backup.service";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const Backup = () => {
-  const { t } = useTranslation();
   const { toast } = useToast();
-  const [backups, setBackups] = useState<BackupConfig[]>(mockBackups);
+  const [backups, setBackups] = useState<BackupSchedule[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -26,18 +27,56 @@ const Backup = () => {
     enabled: true
   });
 
-  const handleAddBackup = () => {
-    const newBackup: BackupConfig = {
-      id: `bk${backups.length + 1}`,
-      name: formData.name,
-      schedule: formData.schedule,
-      enabled: formData.enabled,
-      status: 'pending'
-    };
-    setBackups([...backups, newBackup]);
-    setIsDialogOpen(false);
-    resetForm();
-    toast({ title: "Backup schedule created successfully" });
+  // Load backup schedules
+  useEffect(() => {
+    loadBackupSchedules();
+  }, []);
+
+  const loadBackupSchedules = async () => {
+    try {
+      const data = await backupService.getSchedules();
+      setBackups(data);
+    } catch (error: any) {
+      toast({ 
+        title: "Error loading backups",
+        description: error.response?.data?.message || "Failed to load backup schedules",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAddBackup = async () => {
+    if (!formData.name.trim()) {
+      toast({ 
+        title: "Validation error",
+        description: "Please enter a backup name",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await backupService.createSchedule({
+        name: formData.name,
+        schedule: formData.schedule,
+        enabled: formData.enabled
+      });
+      
+      setIsDialogOpen(false);
+      resetForm();
+      loadBackupSchedules();
+      
+      toast({ 
+        title: "Success",
+        description: "Backup schedule created successfully"
+      });
+    } catch (error: any) {
+      toast({ 
+        title: "Error",
+        description: error.response?.data?.message || "Failed to create backup schedule",
+        variant: "destructive"
+      });
+    }
   };
 
   const resetForm = () => {
@@ -48,44 +87,137 @@ const Backup = () => {
     });
   };
 
-  const handleToggle = (id: string) => {
-    setBackups(backups.map(b => b.id === id ? { ...b, enabled: !b.enabled } : b));
+  const handleToggle = async (id: string) => {
+    try {
+      await backupService.toggleSchedule(id);
+      loadBackupSchedules();
+      toast({ 
+        title: "Success",
+        description: "Backup schedule updated"
+      });
+    } catch (error: any) {
+      toast({ 
+        title: "Error",
+        description: error.response?.data?.message || "Failed to toggle backup schedule",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setBackups(backups.filter(b => b.id !== id));
-    toast({ title: "Backup schedule deleted" });
+  const confirmDelete = (id: string) => {
+    setScheduleToDelete(id);
+    setDeleteDialogOpen(true);
   };
 
-  const handleRunNow = (id: string) => {
-    toast({ 
-      title: "Backup started",
-      description: "Manual backup is running (mock mode)"
-    });
+  const handleDelete = async () => {
+    if (!scheduleToDelete) return;
+
+    try {
+      await backupService.deleteSchedule(scheduleToDelete);
+      setDeleteDialogOpen(false);
+      setScheduleToDelete(null);
+      loadBackupSchedules();
+      toast({ 
+        title: "Success",
+        description: "Backup schedule deleted"
+      });
+    } catch (error: any) {
+      toast({ 
+        title: "Error",
+        description: error.response?.data?.message || "Failed to delete backup schedule",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleExportConfig = () => {
-    const config = {
-      domains: "Mock domain configurations",
-      ssl: "Mock SSL certificates",
-      modsec: "Mock ModSecurity rules",
-      settings: "Mock system settings"
+  const handleRunNow = async (id: string) => {
+    try {
+      toast({ 
+        title: "Backup started",
+        description: "Manual backup is running..."
+      });
+      
+      const result = await backupService.runNow(id);
+      loadBackupSchedules();
+      
+      toast({ 
+        title: "Backup completed",
+        description: `Backup file created: ${result.filename} (${result.size})`
+      });
+    } catch (error: any) {
+      toast({ 
+        title: "Backup failed",
+        description: error.response?.data?.message || "Failed to run backup",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleExportConfig = async () => {
+    try {
+      setExportLoading(true);
+      const blob = await backupService.exportConfig();
+      
+      const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
+      const filename = `nginx-config-${timestamp}.json`;
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast({ 
+        title: "Success",
+        description: "Configuration exported successfully"
+      });
+    } catch (error: any) {
+      toast({ 
+        title: "Export failed",
+        description: error.response?.data?.message || "Failed to export configuration",
+        variant: "destructive"
+      });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleImportConfig = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    
+    input.onchange = async (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        setImportLoading(true);
+        const text = await file.text();
+        const data = JSON.parse(text);
+        
+        const result = await backupService.importConfig(data);
+        
+        toast({ 
+          title: "Import successful",
+          description: `Restored: ${result.domains} domains, ${result.ssl} SSL certs${result.sslFiles ? ` (${result.sslFiles} with files)` : ''}, ${result.acl} ACL rules, ${result.modsec} ModSec rules`
+        });
+        
+        // Reload data
+        loadBackupSchedules();
+      } catch (error: any) {
+        toast({ 
+          title: "Import failed",
+          description: error.response?.data?.message || "Failed to import configuration. Please check the file format.",
+          variant: "destructive"
+        });
+      } finally {
+        setImportLoading(false);
+      }
     };
-    const dataStr = JSON.stringify(config, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `nginx-config-${new Date().toISOString()}.json`;
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-    toast({ title: "Configuration exported successfully" });
-  };
-
-  const handleImportConfig = () => {
-    toast({ 
-      title: "Import configuration",
-      description: "Select a backup file to restore (mock mode)"
-    });
+    
+    input.click();
   };
 
   const getStatusColor = (status: string) => {
@@ -100,7 +232,6 @@ const Backup = () => {
 
   return (
     <div className="space-y-6">
-      <UnderConstructionBanner />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-lg">
@@ -123,9 +254,18 @@ const Backup = () => {
             <p className="text-sm text-muted-foreground">
               Export all domains, SSL certificates, ModSecurity rules, and system settings to a JSON file.
             </p>
-            <Button onClick={handleExportConfig} className="w-full">
-              <Download className="h-4 w-4 mr-2" />
-              Export Configuration
+            <Button onClick={handleExportConfig} className="w-full" disabled={exportLoading}>
+              {exportLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Configuration
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -139,9 +279,18 @@ const Backup = () => {
             <p className="text-sm text-muted-foreground">
               Import and restore configuration from a previously exported backup file.
             </p>
-            <Button onClick={handleImportConfig} variant="outline" className="w-full">
-              <Upload className="h-4 w-4 mr-2" />
-              Import Configuration
+            <Button onClick={handleImportConfig} variant="outline" className="w-full" disabled={importLoading}>
+              {importLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import Configuration
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -247,7 +396,7 @@ const Backup = () => {
                       <Button variant="ghost" size="sm" onClick={() => handleRunNow(backup.id)}>
                         <Play className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(backup.id)}>
+                      <Button variant="ghost" size="sm" onClick={() => confirmDelete(backup.id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -294,6 +443,24 @@ const Backup = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Backup Schedule</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this backup schedule? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
