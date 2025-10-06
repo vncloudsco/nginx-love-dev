@@ -22,6 +22,19 @@ export const exportForSync = async (req: SlaveRequest, res: Response): Promise<a
     const dataString = JSON.stringify(syncData);
     const hash = crypto.createHash('sha256').update(dataString).digest('hex');
 
+    // Update slave node's config hash (master knows what config slave should have)
+    if (req.slaveNode?.id) {
+      await prisma.slaveNode.update({
+        where: { id: req.slaveNode.id },
+        data: { configHash: hash }
+      }).catch((err) => {
+        logger.warn('[NODE-SYNC] Failed to update configHash', {
+          nodeId: req.slaveNode?.id,
+          error: err.message
+        });
+      });
+    }
+
     res.json({
       success: true,
       data: {

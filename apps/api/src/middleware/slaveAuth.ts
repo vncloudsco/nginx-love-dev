@@ -82,10 +82,10 @@ export const validateSlaveApiKey = async (
 /**
  * Validate Master API Key for Node Sync
  * Used when slave nodes pull config from master
- * Checks against SystemConfig.masterApiKey (which is the key slaves use)
+ * Updates slave node status when they connect
  */
 export const validateMasterApiKey = async (
-  req: Request,
+  req: SlaveRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
@@ -100,17 +100,59 @@ export const validateMasterApiKey = async (
       return;
     }
 
-    // Check if any slave has this API key configured (master can accept any slave)
-    // For now, just validate format (non-empty, min length)
-    if (apiKey.length < 10) {
+    // Find slave node by API key
+    const slaveNode = await prisma.slaveNode.findFirst({
+      where: { apiKey },
+      select: {
+        id: true,
+        name: true,
+        host: true,
+        port: true,
+        syncEnabled: true
+      }
+    });
+
+    if (!slaveNode) {
+      logger.warn('[NODE-SYNC] Invalid slave API key attempt', { 
+        apiKey: apiKey.substring(0, 8) + '...' 
+      });
       res.status(401).json({
         success: false,
-        message: 'Invalid API key format'
+        message: 'Invalid API key'
       });
       return;
     }
 
-    // API key is valid, continue
+    if (!slaveNode.syncEnabled) {
+      res.status(403).json({
+        success: false,
+        message: 'Node sync is disabled'
+      });
+      return;
+    }
+
+    // Attach slave node info to request
+    req.slaveNode = slaveNode;
+
+    // Update last seen and status to online
+    await prisma.slaveNode.update({
+      where: { id: slaveNode.id },
+      data: { 
+        lastSeen: new Date(),
+        status: 'online'
+      }
+    }).catch((err) => {
+      logger.warn('[NODE-SYNC] Failed to update slave node status', {
+        nodeId: slaveNode.id,
+        error: err.message
+      });
+    });
+
+    logger.info('[NODE-SYNC] Slave node authenticated', {
+      nodeId: slaveNode.id,
+      nodeName: slaveNode.name
+    });
+
     next();
   } catch (error: any) {
     logger.error('[SLAVE-AUTH] Validate master API key error:', error);
