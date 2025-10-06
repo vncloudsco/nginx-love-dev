@@ -141,6 +141,13 @@ router.post(
 // ==========================================
 
 /**
+ * @route   GET /api/slave/health
+ * @desc    Health check endpoint (called by master to verify slave is alive)
+ * @access  Slave API Key
+ */
+router.get('/health', validateSlaveApiKey, healthCheck);
+
+/**
  * @route   POST /api/slave/sync/pull-config
  * @desc    Pull configuration from master (called by slave)
  * @access  Slave API Key
