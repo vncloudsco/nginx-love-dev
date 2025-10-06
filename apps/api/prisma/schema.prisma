@@ -527,6 +527,11 @@ enum SyncLogType {
   health_check
 }
 
+enum NodeMode {
+  master
+  slave
+}
+
 model SlaveNode {
   id            String          @id @default(cuid())
   name          String          @unique
@@ -558,6 +563,30 @@ model SlaveNode {
   @@index([status])
   @@index([lastSeen])
   @@map("slave_nodes")
+}
+
+model SystemConfig {
+  id                String    @id @default(cuid())
+  nodeMode          NodeMode  @default(master) // master or slave
+  
+  // Master mode settings
+  masterApiEnabled  Boolean   @default(true)
+  
+  // Slave mode settings
+  slaveApiEnabled   Boolean   @default(false)
+  masterHost        String?   // IP of master node
+  masterPort        Int?      // Port of master node
+  masterApiKey      String?   // API key to connect to master
+  
+  // Connection status (for slave mode)
+  connected         Boolean   @default(false)
+  lastConnectedAt   DateTime?
+  connectionError   String?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@map("system_configs")
 }
 
 model SyncLog {

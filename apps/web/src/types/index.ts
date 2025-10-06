@@ -278,3 +278,25 @@ export interface ApiResponse<T> {
   message?: string;
   pagination?: Pagination;
 }
+
+export interface SystemConfig {
+  id: string;
+  nodeMode: 'master' | 'slave';
+  
+  // Master mode settings
+  masterApiEnabled: boolean;
+  
+  // Slave mode settings
+  slaveApiEnabled: boolean;
+  masterHost?: string | null;
+  masterPort?: number | null;
+  masterApiKey?: string | null;
+  
+  // Connection status (for slave mode)
+  connected: boolean;
+  lastConnectedAt?: string | null;
+  connectionError?: string | null;
+  
+  createdAt: string;
+  updatedAt: string;
+}

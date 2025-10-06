@@ -7,38 +7,86 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Server, RefreshCw, Trash2, CheckCircle2, XCircle, Clock, AlertCircle, Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Server, RefreshCw, Trash2, CheckCircle2, XCircle, Clock, AlertCircle, Loader2, Power, Link as LinkIcon, KeyRound } from "lucide-react";
 import { SlaveNode } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { slaveNodesQueryOptions } from "@/queries/slave.query-options";
+import { systemConfigQueryOptions } from "@/queries/system-config.query-options";
 import { slaveNodeService } from "@/services/slave.service";
+import { systemConfigService } from "@/services/system-config.service";
 
 const SlaveNodes = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isMasterDialogOpen, setIsMasterDialogOpen] = useState(false);
 
-  const [formData, setFormData] = useState({
+  // Form data for Register Slave Node (Master mode)
+  const [slaveFormData, setSlaveFormData] = useState({
     name: "",
     host: "",
     port: 3001,
     syncInterval: 60
   });
+
+  // Form data for Connect to Master (Slave mode)  
+  const [masterFormData, setMasterFormData] = useState({
+    masterHost: "",
+    masterPort: 3001,
+    masterApiKey: ""
+  });
+  
   const [apiKeyDialog, setApiKeyDialog] = useState<{ open: boolean; apiKey: string }>({
     open: false,
     apiKey: ''
   });
 
-  // Fetch slave nodes
-  const { data: nodes = [], isLoading } = useQuery(slaveNodesQueryOptions.all);
+  // Confirm mode change dialog
+  const [modeChangeDialog, setModeChangeDialog] = useState<{ open: boolean; newMode: 'master' | 'slave' | null }>({
+    open: false,
+    newMode: null
+  });
 
-  // Register mutation
+  // Fetch system configuration
+  const { data: systemConfigData, isLoading: isConfigLoading } = useQuery(systemConfigQueryOptions.all);
+  const systemConfig = systemConfigData?.data;
+
+  // Fetch slave nodes (only in master mode)
+  const { data: nodes = [], isLoading: isNodesLoading } = useQuery({
+    ...slaveNodesQueryOptions.all,
+    enabled: systemConfig?.nodeMode === 'master'
+  });
+
+  // Update node mode mutation
+  const updateNodeModeMutation = useMutation({
+    mutationFn: systemConfigService.updateNodeMode,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      queryClient.invalidateQueries({ queryKey: ['slave-nodes'] });
+      
+      toast({
+        title: "Node mode changed",
+        description: `Node is now in ${data.data.nodeMode} mode`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to change mode",
+        description: error.response?.data?.message || "An error occurred",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Register slave node mutation (Master mode)
   const registerMutation = useMutation({
     mutationFn: slaveNodeService.register,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['slave-nodes'] });
       setIsDialogOpen(false);
-      resetForm();
+      resetSlaveForm();
       
       // Show API key in separate dialog (critical info!)
       setApiKeyDialog({
@@ -46,7 +94,6 @@ const SlaveNodes = () => {
         apiKey: data.data.apiKey
       });
       
-      // Also show toast
       toast({ 
         title: "Slave node registered successfully",
         description: `Node ${data.data.name} has been registered`,
@@ -55,21 +102,73 @@ const SlaveNodes = () => {
     onError: (error: any) => {
       console.error('Registration error:', error);
       
-      let errorMessage = "Failed to register node";
-      
-      if (error.response?.status === 401) {
-        errorMessage = "Authentication required. Please login first.";
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
       toast({
         title: "Registration failed",
-        description: errorMessage,
+        description: error.response?.data?.message || "Failed to register node",
         variant: "destructive",
         duration: 5000
+      });
+    }
+  });
+
+  // Connect to master mutation (Slave mode)
+  const connectToMasterMutation = useMutation({
+    mutationFn: systemConfigService.connectToMaster,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      setIsMasterDialogOpen(false);
+      resetMasterForm();
+      
+      toast({
+        title: "Connected to master",
+        description: `Successfully connected to ${data.data.masterHost}:${data.data.masterPort}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Connection failed",
+        description: error.response?.data?.message || "Failed to connect to master",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Disconnect from master mutation
+  const disconnectMutation = useMutation({
+    mutationFn: systemConfigService.disconnectFromMaster,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      
+      toast({
+        title: "Disconnected",
+        description: "Disconnected from master node",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Disconnect failed",
+        description: error.response?.data?.message || "Failed to disconnect",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Test master connection mutation
+  const testConnectionMutation = useMutation({
+    mutationFn: systemConfigService.testMasterConnection,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      
+      toast({
+        title: "Connection test successful",
+        description: `Latency: ${data.data.latency}ms | Master: ${data.data.masterStatus}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Connection test failed",
+        description: error.response?.data?.message || "Failed to connect",
+        variant: "destructive"
       });
     }
   });
@@ -129,8 +228,8 @@ const SlaveNodes = () => {
     }
   });
 
-  const handleAddNode = () => {
-    if (!formData.name || !formData.host) {
+  const handleRegisterSlave = () => {
+    if (!slaveFormData.name || !slaveFormData.host) {
       toast({
         title: "Validation error",
         description: "Name and host are required",
@@ -139,22 +238,45 @@ const SlaveNodes = () => {
       return;
     }
 
-    console.log('Registering node:', formData);
-    
     registerMutation.mutate({
-      name: formData.name,
-      host: formData.host,
-      port: formData.port,
-      syncInterval: formData.syncInterval
+      name: slaveFormData.name,
+      host: slaveFormData.host,
+      port: slaveFormData.port,
+      syncInterval: slaveFormData.syncInterval
     });
   };
 
-  const resetForm = () => {
-    setFormData({
+  const handleConnectToMaster = () => {
+    if (!masterFormData.masterHost || !masterFormData.masterApiKey) {
+      toast({
+        title: "Validation error",
+        description: "Master host and API key are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    connectToMasterMutation.mutate({
+      masterHost: masterFormData.masterHost,
+      masterPort: masterFormData.masterPort,
+      masterApiKey: masterFormData.masterApiKey
+    });
+  };
+
+  const resetSlaveForm = () => {
+    setSlaveFormData({
       name: "",
       host: "",
       port: 3001,
       syncInterval: 60
+    });
+  };
+
+  const resetMasterForm = () => {
+    setMasterFormData({
+      masterHost: "",
+      masterPort: 3001,
+      masterApiKey: ""
     });
   };
 
@@ -169,6 +291,23 @@ const SlaveNodes = () => {
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to remove this node?")) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  const handleModeChange = (newMode: 'master' | 'slave') => {
+    if (systemConfig?.nodeMode === newMode) return;
+
+    // Show custom dialog instead of browser confirm
+    setModeChangeDialog({
+      open: true,
+      newMode
+    });
+  };
+
+  const confirmModeChange = () => {
+    if (modeChangeDialog.newMode) {
+      updateNodeModeMutation.mutate(modeChangeDialog.newMode);
+      setModeChangeDialog({ open: false, newMode: null });
     }
   };
 
@@ -192,19 +331,7 @@ const SlaveNodes = () => {
     }
   };
 
-  const isNodeInSync = (node: SlaveNode) => {
-    // Legacy support for old mock data
-    if (node.syncStatus?.inSync !== undefined) {
-      return node.syncStatus.inSync;
-    }
-    // New logic: check if configHash exists and lastSyncAt is recent
-    return !!node.configHash && node.lastSyncAt;
-  };
-
-  // Check authentication
-  const isAuthenticated = !!localStorage.getItem('accessToken');
-
-  if (isLoading) {
+  if (isConfigLoading || isNodesLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -212,364 +339,483 @@ const SlaveNodes = () => {
     );
   }
 
+  const currentMode = systemConfig?.nodeMode || 'master';
+  const isMasterMode = currentMode === 'master';
+  const isSlaveMode = currentMode === 'slave';
+
   return (
     <div className="space-y-6">
-      {/* Authentication Warning */}
-      {!isAuthenticated && (
-        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-              <div>
-                <p className="font-medium text-yellow-800 dark:text-yellow-200">
-                  Authentication Required
-                </p>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                  You need to login to register and manage slave nodes.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-lg">
             <Server className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Slave Nodes</h1>
-            <p className="text-muted-foreground">Manage distributed nginx nodes and configuration sync</p>
+            <h1 className="text-3xl font-bold tracking-tight">Node Synchronization</h1>
+            <p className="text-muted-foreground">Manage master-slave node configuration</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            size="sm" 
-            variant="outline"
-            onClick={handleSyncAll}
-            disabled={syncAllMutation.isPending || nodes.length === 0 || !isAuthenticated}
-          >
-            {syncAllMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
-            )}
-            Sync All
-          </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" disabled={!isAuthenticated}>
-                <Server className="h-4 w-4 mr-2" />
-                Register Node
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Register Slave Node</DialogTitle>
-                <DialogDescription>
-                  Add a new slave node to the cluster
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Node Name</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="nginx-slave-01"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="host">Host/IP Address</Label>
-                  <Input
-                    id="host"
-                    value={formData.host}
-                    onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                    placeholder="10.0.10.11"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="port">Port</Label>
-                  <Input
-                    id="port"
-                    type="number"
-                    value={formData.port}
-                    onChange={(e) => setFormData({ ...formData, port: Number(e.target.value) })}
-                    placeholder="3001"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="syncInterval">Sync Interval (seconds)</Label>
-                  <Input
-                    id="syncInterval"
-                    type="number"
-                    value={formData.syncInterval}
-                    onChange={(e) => setFormData({ ...formData, syncInterval: Number(e.target.value) })}
-                    placeholder="60"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button 
-                  onClick={handleAddNode} 
-                  disabled={registerMutation.isPending || !formData.name || !formData.host}
-                >
-                  {registerMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {registerMutation.isPending ? 'Registering...' : 'Register Node'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+      </div>
 
-          {/* API Key Dialog - Critical Information */}
-          <Dialog open={apiKeyDialog.open} onOpenChange={(open) => setApiKeyDialog({ ...apiKeyDialog, open })}>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-yellow-500" />
-                  Save Your API Key
-                </DialogTitle>
-                <DialogDescription>
-                  This is the only time you'll see this API key. Copy it now and store it securely.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-2">
-                    ⚠️ Important: You will need this API key to configure your slave node.
+      {/* Node Mode Status Card */}
+      <Card className={isMasterMode ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-green-500 bg-green-50 dark:bg-green-900/20'}>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {isMasterMode ? (
+                <Server className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              ) : (
+                <LinkIcon className="h-8 w-8 text-green-600 dark:text-green-400" />
+              )}
+              <div>
+                <p className="text-lg font-semibold">
+                  Current Mode: <span className={isMasterMode ? 'text-blue-700 dark:text-blue-300' : 'text-green-700 dark:text-green-300'}>
+                    {isMasterMode ? 'MASTER' : 'SLAVE'}
+                  </span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {isMasterMode ? 'This node can register and manage slave nodes' : 'This node is connected to a master node'}
+                </p>
+              </div>
+            </div>
+            {isSlaveMode && systemConfig?.connected && (
+              <Badge variant="default" className="bg-green-600">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Connected to Master
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Main Tabs */}
+      <Tabs value={currentMode} onValueChange={(value) => handleModeChange(value as 'master' | 'slave')}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="master" className="flex items-center gap-2">
+            <Server className="h-4 w-4" />
+            Master Mode
+          </TabsTrigger>
+          <TabsTrigger value="slave" className="flex items-center gap-2">
+            <LinkIcon className="h-4 w-4" />
+            Slave Mode
+          </TabsTrigger>
+        </TabsList>
+
+        {/* MASTER MODE TAB */}
+        <TabsContent value="master" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Master Node Configuration</CardTitle>
+              <CardDescription>
+                Register slave nodes and manage distributed configuration sync
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-medium">Registered Slave Nodes</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {nodes.length} slave node(s) registered
                   </p>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="apiKey">API Key</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="apiKey"
-                      value={apiKeyDialog.apiKey}
-                      readOnly
-                      className="font-mono text-sm"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText(apiKeyDialog.apiKey);
-                        toast({
-                          title: "Copied!",
-                          description: "API key copied to clipboard"
-                        });
-                      }}
-                    >
-                      Copy
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <p className="text-sm font-medium">Next Steps:</p>
-                  <ol className="text-sm space-y-1 list-decimal list-inside">
-                    <li>Copy the API key above</li>
-                    <li>Save it in your slave node's environment variables</li>
-                    <li>Configure: <code className="text-xs bg-background px-1 py-0.5 rounded">SLAVE_API_KEY={apiKeyDialog.apiKey.substring(0, 16)}...</code></li>
-                    <li>Start your slave node application</li>
-                  </ol>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={() => setApiKeyDialog({ open: false, apiKey: '' })}>
-                  I've Saved the API Key
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Nodes</CardTitle>
-            <Server className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{nodes.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Registered slave nodes
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Online Nodes</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">
-              {nodes.filter(n => n.status === 'online').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Active and healthy
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sync Status</CardTitle>
-            <RefreshCw className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {nodes.filter(n => isNodeInSync(n)).length}/{nodes.length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Nodes in sync
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Registered Nodes ({nodes.length})</CardTitle>
-          <CardDescription>View and manage slave node cluster</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Host:Port</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Last Seen</TableHead>
-                  <TableHead>Sync Status</TableHead>
-                  <TableHead>Config Hash</TableHead>
-                  <TableHead>Enabled</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {nodes.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                      No slave nodes registered. Click "Register Node" to add one.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  nodes.map((node) => (
-                    <TableRow key={node.id}>
-                      <TableCell className="font-medium">{node.name}</TableCell>
-                      <TableCell className="font-mono text-sm">{node.host}:{node.port}</TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusColor(node.status)}>
-                          {getStatusIcon(node.status)}
-                          <span className="ml-1">{node.status}</span>
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{node.version || 'N/A'}</TableCell>
-                      <TableCell className="text-sm">
-                        {node.lastSeen ? new Date(node.lastSeen).toLocaleString() : 'Never'}
-                      </TableCell>
-                      <TableCell>
-                        {isNodeInSync(node) ? (
-                          <Badge variant="default">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            In Sync
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive">
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Out of Sync
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {node.configHash?.substring(0, 12) || 'N/A'}...
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={node.syncEnabled ? 'default' : 'secondary'}>
-                          {node.syncEnabled ? 'Yes' : 'No'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleSync(node.id)}
-                          disabled={syncMutation.isPending || node.status === 'syncing' || !node.syncEnabled}
-                          title="Sync configuration"
-                        >
-                          {syncMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleDelete(node.id)}
-                          disabled={deleteMutation.isPending}
-                          title="Remove node"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Cluster Topology</CardTitle>
-          <CardDescription>Visual representation of node cluster</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center p-8 space-x-4">
-            <div className="flex flex-col items-center">
-              <div className="w-20 h-20 rounded-lg bg-primary flex items-center justify-center mb-2">
-                <Server className="h-10 w-10 text-primary-foreground" />
-              </div>
-              <p className="text-sm font-medium">Master Node</p>
-              <p className="text-xs text-muted-foreground">Primary</p>
-            </div>
-            {nodes.length > 0 && (
-              <>
-                <div className="flex-1 h-0.5 bg-border"></div>
-                <div className="grid grid-cols-3 gap-4">
-                  {nodes.map((node) => (
-                    <div key={node.id} className="flex flex-col items-center">
-                      <div className={`w-16 h-16 rounded-lg ${
-                        node.status === 'online' ? 'bg-green-100 dark:bg-green-900' : 
-                        node.status === 'syncing' ? 'bg-yellow-100 dark:bg-yellow-900' :
-                        node.status === 'error' ? 'bg-red-100 dark:bg-red-900' :
-                        'bg-gray-100 dark:bg-gray-800'
-                      } flex items-center justify-center mb-2`}>
-                        <Server className="h-8 w-8" />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSyncAll}
+                    disabled={syncAllMutation.isPending || nodes.length === 0}
+                  >
+                    {syncAllMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Sync All
+                  </Button>
+                  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm">
+                        <Server className="h-4 w-4 mr-2" />
+                        Register Slave Node
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Register Slave Node</DialogTitle>
+                        <DialogDescription>
+                          Add a new slave node to receive configuration updates
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="name">Node Name</Label>
+                          <Input
+                            id="name"
+                            value={slaveFormData.name}
+                            onChange={(e) => setSlaveFormData({ ...slaveFormData, name: e.target.value })}
+                            placeholder="slave-node-01"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="host">Slave Host/IP</Label>
+                          <Input
+                            id="host"
+                            value={slaveFormData.host}
+                            onChange={(e) => setSlaveFormData({ ...slaveFormData, host: e.target.value })}
+                            placeholder="Enter slave node IP address"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="port">Port</Label>
+                          <Input
+                            id="port"
+                            type="number"
+                            value={slaveFormData.port}
+                            onChange={(e) => setSlaveFormData({ ...slaveFormData, port: Number(e.target.value) })}
+                            placeholder="3001"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="syncInterval">Sync Interval (seconds)</Label>
+                          <Input
+                            id="syncInterval"
+                            type="number"
+                            value={slaveFormData.syncInterval}
+                            onChange={(e) => setSlaveFormData({ ...slaveFormData, syncInterval: Number(e.target.value) })}
+                            placeholder="60"
+                          />
+                        </div>
                       </div>
-                      <p className="text-xs font-medium">{node.name}</p>
-                      <Badge variant={getStatusColor(node.status)} className="text-xs mt-1">
-                        {node.status}
-                      </Badge>
-                    </div>
-                  ))}
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleRegisterSlave}
+                          disabled={registerMutation.isPending}
+                        >
+                          {registerMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Register
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* Slave Nodes Table */}
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Host:Port</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Seen</TableHead>
+                      <TableHead>Config Hash</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {nodes.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No slave nodes registered. Click "Register Slave Node" to add one.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      nodes.map((node) => (
+                        <TableRow key={node.id}>
+                          <TableCell className="font-medium">{node.name}</TableCell>
+                          <TableCell className="font-mono text-sm">{node.host}:{node.port}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusColor(node.status)}>
+                              {getStatusIcon(node.status)}
+                              <span className="ml-1">{node.status}</span>
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {node.lastSeen ? new Date(node.lastSeen).toLocaleString() : 'Never'}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {node.configHash?.substring(0, 12) || 'N/A'}...
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSync(node.id)}
+                              disabled={syncMutation.isPending}
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(node.id)}
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* SLAVE MODE TAB */}
+        <TabsContent value="slave" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Slave Node Configuration</CardTitle>
+              <CardDescription>
+                Connect to a master node to receive configuration updates
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!systemConfig?.connected ? (
+                <div className="space-y-4">
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      You are in Slave Mode but not connected to any master node.
+                      Click "Connect to Master" to configure the connection.
+                    </AlertDescription>
+                  </Alert>
+
+                  <Dialog open={isMasterDialogOpen} onOpenChange={setIsMasterDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="w-full">
+                        <LinkIcon className="h-4 w-4 mr-2" />
+                        Connect to Master Node
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Connect to Master Node</DialogTitle>
+                        <DialogDescription>
+                          Enter the master node details and API key to establish connection
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="masterHost">Master Host/IP</Label>
+                          <Input
+                            id="masterHost"
+                            value={masterFormData.masterHost}
+                            onChange={(e) => setMasterFormData({ ...masterFormData, masterHost: e.target.value })}
+                            placeholder="Enter master node IP address"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="masterPort">Master Port</Label>
+                          <Input
+                            id="masterPort"
+                            type="number"
+                            value={masterFormData.masterPort}
+                            onChange={(e) => setMasterFormData({ ...masterFormData, masterPort: Number(e.target.value) })}
+                            placeholder="3001"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="masterApiKey">Master API Key</Label>
+                          <Input
+                            id="masterApiKey"
+                            type="password"
+                            value={masterFormData.masterApiKey}
+                            onChange={(e) => setMasterFormData({ ...masterFormData, masterApiKey: e.target.value })}
+                            placeholder="Enter API key from master node"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Get this API key from the master node when registering this slave
+                          </p>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsMasterDialogOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleConnectToMaster}
+                          disabled={connectToMasterMutation.isPending}
+                        >
+                          {connectToMasterMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Connect
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Card className="border-green-500 bg-green-50 dark:bg-green-900/20">
+                    <CardContent className="pt-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-5 w-5 text-green-600" />
+                            <span className="font-medium">Connected to Master</span>
+                          </div>
+                          <Badge variant="default" className="bg-green-600">
+                            Active
+                          </Badge>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Master Host:</span>
+                            <span className="font-mono">{systemConfig.masterHost}:{systemConfig.masterPort}</span>
+                          </div>
+                          {systemConfig.lastConnectedAt && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Last Connected:</span>
+                              <span>{new Date(systemConfig.lastConnectedAt).toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => testConnectionMutation.mutate()}
+                            disabled={testConnectionMutation.isPending}
+                          >
+                            {testConnectionMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                            )}
+                            Test Connection
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => {
+                              if (confirm('Are you sure you want to disconnect from the master node?')) {
+                                disconnectMutation.mutate();
+                              }
+                            }}
+                            disabled={disconnectMutation.isPending}
+                          >
+                            {disconnectMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <XCircle className="h-4 w-4 mr-2" />
+                            )}
+                            Disconnect
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Mode Change Confirmation Dialog */}
+      <Dialog open={modeChangeDialog.open} onOpenChange={(open) => setModeChangeDialog({ ...modeChangeDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-yellow-500" />
+              Confirm Mode Change
+            </DialogTitle>
+            <DialogDescription>
+              {modeChangeDialog.newMode === 'slave'
+                ? "Switching to Slave mode will disable the ability to register slave nodes. You will need to connect to a master node."
+                : "Switching to Master mode will disconnect from the current master and allow you to register slave nodes."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setModeChangeDialog({ open: false, newMode: null })}
+              disabled={updateNodeModeMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={confirmModeChange}
+              disabled={updateNodeModeMutation.isPending}
+            >
+              {updateNodeModeMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {updateNodeModeMutation.isPending ? 'Changing...' : 'Continue'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* API Key Dialog */}
+      <Dialog open={apiKeyDialog.open} onOpenChange={(open) => setApiKeyDialog({ ...apiKeyDialog, open })}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-yellow-500" />
+              Slave Node API Key
+            </DialogTitle>
+            <DialogDescription>
+              Save this API key! You'll need it to connect the slave node to this master.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                This API key will only be shown once. Copy it now and store it securely.
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-2">
+              <Label htmlFor="apiKey">API Key</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="apiKey"
+                  value={apiKeyDialog.apiKey}
+                  readOnly
+                  className="font-mono text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(apiKeyDialog.apiKey);
+                    toast({
+                      title: "Copied!",
+                      description: "API key copied to clipboard"
+                    });
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-muted rounded-lg space-y-2">
+              <p className="text-sm font-medium">Next Steps:</p>
+              <ol className="text-sm space-y-1 list-decimal list-inside">
+                <li>Go to the slave node web interface</li>
+                <li>Switch to <strong>Slave Mode</strong></li>
+                <li>Click "Connect to Master Node"</li>
+                <li>Enter this API key along with master host/port</li>
+                <li>Click "Connect" to establish synchronization</li>
+              </ol>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+          <DialogFooter>
+            <Button onClick={() => setApiKeyDialog({ open: false, apiKey: '' })}>
+              I've Saved the API Key
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

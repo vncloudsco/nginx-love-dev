@@ -13,6 +13,7 @@ import userRoutes from './user.routes';
 import dashboardRoutes from './dashboard.routes';
 import backupRoutes from './backup.routes';
 import slaveRoutes from './slave.routes';
+import systemConfigRoutes from './system-config.routes';
 
 const router = Router();
 
@@ -40,5 +41,6 @@ router.use('/users', userRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/backup', backupRoutes);
 router.use('/slave', slaveRoutes);
+router.use('/system-config', systemConfigRoutes);
 
 export default router;
