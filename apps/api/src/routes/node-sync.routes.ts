@@ -1,5 +1,5 @@
 import express from 'express';
-import { exportForSync, importFromMaster } from '../controllers/node-sync.controller';
+import { exportForSync, importFromMaster, getCurrentConfigHash } from '../controllers/node-sync.controller';
 import { authenticate } from '../middleware/auth';
 import { validateMasterApiKey } from '../middleware/slaveAuth';
 
@@ -16,5 +16,11 @@ router.get('/export', validateMasterApiKey, exportForSync);
  * POST /api/node-sync/import
  */
 router.post('/import', authenticate, importFromMaster);
+
+/**
+ * Get current config hash (requires user auth)
+ * GET /api/node-sync/current-hash
+ */
+router.get('/current-hash', authenticate, getCurrentConfigHash);
 
 export default router;

@@ -388,41 +388,57 @@ export const syncWithMaster = async (req: AuthRequest, res: Response) => {
       throw new Error(response.data.message || 'Failed to export config from master');
     }
 
-    const { hash, config: masterConfig } = response.data.data;
+    const { hash: masterHash, config: masterConfig } = response.data.data;
 
-    logger.info('Downloaded config from master', {
-      hash,
-      lastKnownHash: config.lastSyncHash || 'none'
+    // Calculate CURRENT hash of slave's config (to detect data loss)
+    const slaveCurrentConfigResponse = await axios.get(
+      `http://localhost:${process.env.PORT || 3001}/api/node-sync/current-hash`,
+      {
+        headers: {
+          'Authorization': req.headers.authorization || ''
+        }
+      }
+    );
+
+    const slaveCurrentHash = slaveCurrentConfigResponse.data.data?.hash || null;
+
+    logger.info('Comparing slave current config with master', {
+      masterHash,
+      slaveCurrentHash,
+      lastSyncHash: config.lastSyncHash || 'none'
     });
 
-    // Check if config changed (compare hashes)
-    if (config.lastSyncHash && config.lastSyncHash === hash) {
-      logger.info('Config unchanged (hash match), skipping import');
+    // Compare CURRENT slave hash with master hash
+    if (slaveCurrentHash && slaveCurrentHash === masterHash) {
+      logger.info('Config identical (hash match), skipping import');
       
-      // Update lastConnectedAt anyway
+      // Update lastConnectedAt and lastSyncHash
       await prisma.systemConfig.update({
         where: { id: config.id },
         data: {
-          lastConnectedAt: new Date()
+          lastConnectedAt: new Date(),
+          lastSyncHash: masterHash
         }
       });
 
       return res.json({
         success: true,
-        message: 'Configuration already up to date (no changes detected)',
+        message: 'Configuration already synchronized (no changes detected)',
         data: {
           imported: false,
-          hash,
+          masterHash,
+          slaveHash: slaveCurrentHash,
           changesApplied: 0,
           lastSyncAt: new Date().toISOString()
         }
       });
     }
 
-    // Hash changed → Import config
-    logger.info('Config changed (hash mismatch), importing...', {
-      oldHash: config.lastSyncHash || 'none',
-      newHash: hash
+    // Hash different → Force sync (data loss or master updated)
+    logger.info('Config mismatch detected, force syncing...', {
+      masterHash,
+      slaveCurrentHash: slaveCurrentHash || 'null',
+      reason: !slaveCurrentHash ? 'slave_empty' : 'data_mismatch'
     });
 
     // Extract JWT token from request
@@ -433,7 +449,7 @@ export const syncWithMaster = async (req: AuthRequest, res: Response) => {
     const importResponse = await axios.post(
       `http://localhost:${process.env.PORT || 3001}/api/node-sync/import`,
       {
-        hash,
+        hash: masterHash,
         config: masterConfig
       },
       {
@@ -453,7 +469,7 @@ export const syncWithMaster = async (req: AuthRequest, res: Response) => {
     await prisma.systemConfig.update({
       where: { id: config.id },
       data: {
-        lastSyncHash: hash,
+        lastSyncHash: masterHash,
         lastConnectedAt: new Date()
       }
     });
@@ -462,10 +478,11 @@ export const syncWithMaster = async (req: AuthRequest, res: Response) => {
 
     res.json({
       success: true,
-      message: 'Sync completed successfully',
+      message: 'Configuration synchronized successfully',
       data: {
         imported: true,
-        hash,
+        masterHash,
+        slaveHash: slaveCurrentHash,
         changesApplied: importData.changes,
         details: importData.details,
         lastSyncAt: new Date().toISOString()

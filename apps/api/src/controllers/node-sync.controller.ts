@@ -125,37 +125,59 @@ export const importFromMaster = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
- * Collect sync data (NO timestamps, NO IDs - only actual config)
+ * Get current config hash of slave node
+ */
+export const getCurrentConfigHash = async (req: AuthRequest, res: Response) => {
+  try {
+    const currentConfig = await collectSyncData();
+    const configString = JSON.stringify(currentConfig);
+    const hash = crypto.createHash('sha256').update(configString).digest('hex');
+
+    logger.info('[NODE-SYNC] Current config hash calculated', { hash });
+
+    res.json({
+      success: true,
+      data: { hash }
+    });
+  } catch (error: any) {
+    logger.error('[NODE-SYNC] Get current hash error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to calculate current config hash'
+    });
+  }
+};
+
+/**
+ * Collect sync data (NO timestamps for stable hash)
  */
 async function collectSyncData() {
-  const [domains, ssl, modsecCRS, modsecCustom, acl, users] = await Promise.all([
-    prisma.domain.findMany({
-      include: {
-        upstreams: true,
-        loadBalancer: true
-      }
-    }),
-    prisma.sSLCertificate.findMany({
-      include: {
-        domain: true
-      }
-    }),
-    prisma.modSecCRSRule.findMany(),
-    prisma.modSecRule.findMany(),
-    prisma.aclRule.findMany(),
-    prisma.user.findMany()
-  ]);
+  const domains = await prisma.domain.findMany({
+    include: {
+      upstreams: true,
+      loadBalancer: true
+    }
+  });
+
+  const ssl = await prisma.sSLCertificate.findMany({
+    include: {
+      domain: true
+    }
+  });
+  
+  const modsecCRS = await prisma.modSecCRSRule.findMany();
+  const modsecCustom = await prisma.modSecRule.findMany();
+  const acl = await prisma.aclRule.findMany();
+  const users = await prisma.user.findMany();
 
   return {
-    version: '1.0-sync',
-    
     // Domains (NO timestamps, NO IDs)
     domains: domains.map(d => ({
       name: d.name,
       status: d.status,
       sslEnabled: d.sslEnabled,
       modsecEnabled: d.modsecEnabled,
-      upstreams: d.upstreams?.map(u => ({
+      upstreams: d.upstreams.map(u => ({
         host: u.host,
         port: u.port,
         protocol: u.protocol,
@@ -163,7 +185,7 @@ async function collectSyncData() {
         weight: u.weight,
         maxFails: u.maxFails,
         failTimeout: u.failTimeout
-      })) || [],
+      })),
       loadBalancer: d.loadBalancer ? {
         algorithm: d.loadBalancer.algorithm,
         healthCheckEnabled: d.loadBalancer.healthCheckEnabled,
@@ -172,7 +194,7 @@ async function collectSyncData() {
         healthCheckTimeout: d.loadBalancer.healthCheckTimeout
       } : null
     })),
-    
+
     // SSL Certificates (NO timestamps, NO IDs)
     ssl: ssl.map(s => ({
       domainName: s.domain?.name,
@@ -182,12 +204,12 @@ async function collectSyncData() {
       certificate: s.certificate,
       privateKey: s.privateKey,
       chain: s.chain,
-      validFrom: s.validFrom,
-      validTo: s.validTo,
-      autoRenew: s.autoRenew
+      autoRenew: s.autoRenew,
+      validFrom: s.validFrom.toISOString(),
+      validTo: s.validTo.toISOString()
     })),
-    
-    // ModSecurity CRS Rules
+
+    // ModSecurity CRS Rules (NO timestamps, NO IDs)
     modsecCRS: modsecCRS.map(r => ({
       ruleFile: r.ruleFile,
       name: r.name,
@@ -196,27 +218,27 @@ async function collectSyncData() {
       enabled: r.enabled,
       paranoia: r.paranoia
     })),
-    
-    // ModSecurity Custom Rules
+
+    // ModSecurity Custom Rules (NO timestamps, NO IDs)
     modsecCustom: modsecCustom.map(r => ({
       name: r.name,
       category: r.category,
       ruleContent: r.ruleContent,
-      enabled: r.enabled,
-      description: r.description
-    })),
-    
-    // ACL Rules
-    acl: acl.map(r => ({
-      name: r.name,
-      type: r.type,
-      conditionField: r.conditionField,
-      conditionOperator: r.conditionOperator,
-      conditionValue: r.conditionValue,
-      action: r.action,
+      description: r.description,
       enabled: r.enabled
     })),
-    
+
+    // ACL (NO timestamps, NO IDs)
+    acl: acl.map(a => ({
+      name: a.name,
+      type: a.type,
+      conditionField: a.conditionField,
+      conditionOperator: a.conditionOperator,
+      conditionValue: a.conditionValue,
+      action: a.action,
+      enabled: a.enabled
+    })),
+
     // Users (NO timestamps, NO IDs, keep password hashes)
     users: users.map(u => ({
       email: u.email,
