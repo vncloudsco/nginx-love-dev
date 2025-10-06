@@ -642,7 +642,7 @@ const Backup = () => {
                   <li><strong>ModSecurity Rules</strong>: CRS rules and custom security rules</li>
                   <li><strong>ACL Rules</strong>: All access control configurations</li>
                   <li><strong>Alert Settings</strong>: Notification channels and alert rules</li>
-                  <li><strong>Users</strong>: User accounts (passwords must be reset)</li>
+                  <li><strong>Users</strong>: User accounts with passwords (can login immediately)</li>
                   <li><strong>System Configs</strong>: Global nginx configurations</li>
                 </ul>
               </div>
@@ -655,7 +655,7 @@ const Backup = () => {
                   <li>Nginx will be automatically reloaded</li>
                   <li>Domains will be immediately accessible with restored configurations</li>
                   <li>SSL certificates will be active and functional</li>
-                  <li>Users will need to reset their passwords (security measure)</li>
+                  <li>Users can login with their original passwords from backup</li>
                 </ul>
               </div>
 

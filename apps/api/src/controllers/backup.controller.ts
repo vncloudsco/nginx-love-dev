@@ -747,7 +747,7 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
       }
     }
 
-    // 7. Restore users (NOTE: Passwords are excluded for security)
+        // 7. Restore users (with hashed passwords)
     if (backupData.users && Array.isArray(backupData.users)) {
       for (const userData of backupData.users) {
         try {
@@ -756,37 +756,33 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
             where: { username: userData.username }
           });
 
-          if (existingUser) {
-            logger.info(`User ${userData.username} already exists, skipping`);
-            continue;
-          }
-
-          // Create user with default password (must be changed on first login)
-          const user = await prisma.user.create({
-            data: {
-              username: userData.username,
-              email: userData.email,
-              fullName: userData.profile?.fullName || userData.username,
-              password: 'CHANGE_ME_ON_FIRST_LOGIN', // Placeholder
-              role: userData.role,
-              status: 'inactive' // Force inactive until password is set
-            }
-          });
-
-          // Create profile if exists
-          if (userData.profile) {
-            await prisma.userProfile.create({
+          if (!existingUser) {
+            // Create user with password from backup (already hashed)
+            await prisma.user.create({
               data: {
-                userId: user.id,
-                bio: userData.profile.bio,
-                location: userData.profile.location,
-                website: userData.profile.website
+                username: userData.username,
+                email: userData.email,
+                password: userData.password, // Use hashed password from backup
+                fullName: userData.fullName || userData.username,
+                status: userData.status || 'active', // Keep original status
+                role: userData.role || 'viewer',
+                avatar: userData.avatar,
+                phone: userData.phone,
+                timezone: userData.timezone || 'UTC',
+                language: userData.language || 'en',
+                lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : null,
+                profile: userData.profile ? {
+                  create: {
+                    bio: userData.profile.bio || null,
+                    location: userData.profile.location || null,
+                    website: userData.profile.website || null
+                  }
+                } : undefined
               }
             });
+            results.users++;
+            logger.info(`User ${userData.username} restored with original password`);
           }
-
-          results.users++;
-          logger.info(`User ${userData.username} restored (password must be reset)`);
         } catch (error) {
           logger.error(`Failed to restore user ${userData.username}:`, error);
         }
@@ -1416,18 +1412,15 @@ async function collectBackupData() {
     }
   });
 
-  // Get all users (excluding passwords for security)
+  // Get all users (including hashed passwords for complete backup)
   const users = await prisma.user.findMany({
     include: {
       profile: true
     }
   });
 
-  // Remove password from users
-  const usersWithoutPassword = users.map(u => {
-    const { password, ...userWithoutPassword } = u;
-    return userWithoutPassword;
-  });
+  // Keep passwords as they are already hashed (bcrypt)
+  // This allows users to login immediately after restore without password reset
 
   // Get nginx configs
   const nginxConfigs = await prisma.nginxConfig.findMany();
@@ -1473,8 +1466,8 @@ async function collectBackupData() {
       channels: r.channels.map(c => c.channel.name)
     })),
     
-    // Users (without passwords)
-    users: usersWithoutPassword,
+    // Users (with hashed passwords for complete restore)
+    users: users,
     
     // Global nginx configurations
     nginxConfigs
