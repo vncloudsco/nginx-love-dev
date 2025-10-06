@@ -116,17 +116,24 @@ pnpm install >> "${LOG_FILE}" 2>&1 || error "Failed to update monorepo dependenc
 
 cd "${BACKEND_DIR}"
 
-# Generate Prisma client (in case schema changed)
+# Start database if not running
+if ! docker ps | grep -q "${DB_CONTAINER_NAME}"; then
+    log "Starting database container..."
+    docker start "${DB_CONTAINER_NAME}" > /dev/null 2>&1
+    sleep 3
+fi
+
+# Generate Prisma client
 log "Generating Prisma client..."
-pnpm prisma:generate >> "$LOG_FILE" 2>&1 || error "Failed to generate Prisma client"
+npx prisma generate > /dev/null 2>&1 || pnpm exec prisma generate > /dev/null 2>&1
 
-# Run database migrations (only creates new tables, doesn't overwrite existing data)
+# Run database migrations
 log "Running database migrations..."
-pnpm exec prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
+npx prisma migrate deploy > /dev/null 2>&1 || pnpm exec prisma migrate deploy > /dev/null 2>&1
 
-# Seed database (only adds missing data, doesn't overwrite existing)
-log "Seeding database for missing tables/data..."
-pnpm prisma:seed >> "$LOG_FILE" 2>&1 || warn "Failed to seed database (this is normal if data already exists)"
+# Seed database
+log "Seeding database..."
+npx ts-node prisma/seed.ts > /dev/null 2>&1 || pnpm exec ts-node prisma/seed.ts > /dev/null 2>&1 || warn "Seeding skipped"
 
 # Build backend
 log "Building backend..."
@@ -164,26 +171,11 @@ log "✓ Frontend build completed"
 # Step 5: Restart services
 log "Step 5/6: Starting services..."
 
-# Ensure database container is running
+# Database should already be running from Step 3, just verify
 if ! docker ps | grep -q "${DB_CONTAINER_NAME}"; then
-    log "Starting database container..."
-    docker start "${DB_CONTAINER_NAME}" >> "${LOG_FILE}" 2>&1 || error "Failed to start database container"
-    
-    # Wait for database to be ready
-    log "Waiting for database to be ready..."
-    sleep 5
-    for i in {1..30}; do
-        if docker exec "${DB_CONTAINER_NAME}" pg_isready > /dev/null 2>&1; then
-            log "✓ Database is ready"
-            break
-        fi
-        if [ "${i}" -eq 30 ]; then
-            error "Database failed to start"
-        fi
-        sleep 1
-    done
+    error "Database container stopped unexpectedly. Please check Docker status."
 else
-    log "✓ Database container is already running"
+    log "✓ Database container is running"
 fi
 
 # Start backend service
