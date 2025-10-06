@@ -20,8 +20,10 @@ const Backup = () => {
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [importWarningOpen, setImportWarningOpen] = useState(false);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -186,17 +188,55 @@ const Backup = () => {
   };
 
   const handleImportConfig = () => {
+    // Open warning dialog first
+    setImportWarningOpen(true);
+  };
+
+  const handleFileSelect = (file: File) => {
+    if (!file.name.endsWith('.json')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select a JSON backup file",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setPendingImportFile(file);
+    setImportWarningOpen(false);
+    setImportConfirmOpen(true);
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const openFileDialog = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'application/json';
+    input.accept = 'application/json,.json';
     
     input.onchange = (e: Event) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      
-      // Show confirmation dialog first
-      setPendingImportFile(file);
-      setImportConfirmOpen(true);
+      if (file) {
+        handleFileSelect(file);
+      }
     };
     
     input.click();
@@ -476,6 +516,104 @@ const Backup = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Warning Dialog with File Upload */}
+      <Dialog open={importWarningOpen} onOpenChange={setImportWarningOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Upload className="h-6 w-6 text-orange-500" />
+              Import Configuration Backup
+            </DialogTitle>
+            <DialogDescription className="space-y-4 pt-4">
+              <div className="bg-red-50 dark:bg-red-950 border-2 border-red-300 dark:border-red-800 rounded-lg p-4">
+                <p className="font-bold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
+                  <span className="text-2xl">⚠️</span>
+                  CRITICAL WARNING - ALL DATA WILL BE REPLACED
+                </p>
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  Importing a backup will <strong className="font-bold underline">COMPLETELY REPLACE</strong> all existing configurations on this server.
+                  This action is <strong className="font-bold">IRREVERSIBLE</strong> without a prior backup.
+                </p>
+              </div>
+
+              <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                <p className="font-semibold text-orange-900 dark:text-orange-100 mb-2">
+                  📦 What will be replaced:
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-sm text-orange-800 dark:text-orange-200">
+                  <div>• All domain configurations</div>
+                  <div>• Load balancer settings</div>
+                  <div>• SSL certificates & files</div>
+                  <div>• ModSecurity rules</div>
+                  <div>• ACL access rules</div>
+                  <div>• Alert configurations</div>
+                  <div>• User accounts</div>
+                  <div>• Nginx vhost files</div>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                <p className="text-sm text-yellow-900 dark:text-yellow-100 font-semibold mb-2">
+                  💡 Before you proceed:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-yellow-800 dark:text-yellow-200 pl-2">
+                  <li>Export your current configuration as a safety backup</li>
+                  <li>Ensure the backup file is from a trusted source</li>
+                  <li>Verify the backup file is not corrupted</li>
+                  <li>Notify other administrators about the restore</li>
+                </ul>
+              </div>
+
+              {/* File Upload Zone */}
+              <div className="pt-4">
+                <Label className="text-base font-semibold mb-3 block">
+                  Select Backup File to Import
+                </Label>
+                <div
+                  onDrop={handleFileDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onClick={openFileDialog}
+                  className={`
+                    relative border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
+                    transition-all duration-200 ease-in-out
+                    ${isDragging 
+                      ? 'border-primary bg-primary/5 scale-[1.02]' 
+                      : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50'
+                    }
+                  `}
+                >
+                  <div className="flex flex-col items-center gap-3">
+                    <div className={`p-4 rounded-full ${isDragging ? 'bg-primary/10' : 'bg-muted'}`}>
+                      <Upload className={`h-8 w-8 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <p className="text-base font-medium">
+                        {isDragging ? 'Drop file here' : 'Click to browse or drag & drop'}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Accepts .json backup files only
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <FileArchive className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        Maximum file size: 50MB
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportWarningOpen(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Import/Restore Confirmation Dialog */}
       <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
