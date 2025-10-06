@@ -125,20 +125,22 @@ fi
 
 # Generate Prisma client
 log "Generating Prisma client..."
-pnpm exec prisma generate >> "$LOG_FILE" 2>&1 || error "Failed to generate Prisma client"
+pnpm prisma generate >> "$LOG_FILE" 2>&1 || error "Failed to generate Prisma client"
 
 # Run database migrations
 log "Running database migrations..."
-pnpm exec prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
+cd "${BACKEND_DIR}"
+pnpm prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
 
 # Seed database
 log "Seeding database..."
-pnpm exec ts-node prisma/seed.ts >> "$LOG_FILE" 2>&1 || warn "Failed to seed database (this is normal if data already exists)"
+cd "${BACKEND_DIR}"
+pnpm  ts-node prisma/seed.ts >> "$LOG_FILE" 2>&1 || warn "Failed to seed database (this is normal if data already exists)"
 
 # Build backend
 log "Building backend..."
-cd "${PROJECT_DIR}"
-pnpm --filter @nginx-love/api build >> "${LOG_FILE}" 2>&1 || error "Failed to build backend"
+cd "${BACKEND_DIR}"
+pnpm build >> "${LOG_FILE}" 2>&1 || error "Failed to build backend"
 
 log "✓ Backend build completed"
 
@@ -155,8 +157,8 @@ fi
 
 # Build frontend
 log "Building frontend..."
-cd "${PROJECT_DIR}"
-pnpm --filter @nginx-love/web build >> "${LOG_FILE}" 2>&1 || error "Failed to build frontend"
+cd "${FRONTEND_DIR}"
+pnpm build >> "${LOG_FILE}" 2>&1 || error "Failed to build frontend"
 
 # Get public IP for CSP update
 PUBLIC_IP=$(curl -s ifconfig.me || curl -s icanhazip.com || curl -s ipinfo.io/ip || echo "localhost")
