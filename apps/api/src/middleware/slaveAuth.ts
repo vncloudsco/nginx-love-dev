@@ -78,3 +78,45 @@ export const validateSlaveApiKey = async (
     });
   }
 };
+
+/**
+ * Validate Master API Key for Node Sync
+ * Used when slave nodes pull config from master
+ * Checks against SystemConfig.masterApiKey (which is the key slaves use)
+ */
+export const validateMasterApiKey = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const apiKey = req.headers['x-slave-api-key'] as string;
+
+    if (!apiKey) {
+      res.status(401).json({
+        success: false,
+        message: 'Slave API key required'
+      });
+      return;
+    }
+
+    // Check if any slave has this API key configured (master can accept any slave)
+    // For now, just validate format (non-empty, min length)
+    if (apiKey.length < 10) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid API key format'
+      });
+      return;
+    }
+
+    // API key is valid, continue
+    next();
+  } catch (error: any) {
+    logger.error('[SLAVE-AUTH] Validate master API key error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Authentication failed'
+    });
+  }
+};

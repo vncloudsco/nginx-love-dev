@@ -339,3 +339,144 @@ export const testMasterConnection = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+/**
+ * Sync configuration from master (slave pulls all config)
+ * NEW APPROACH: Download config → Calculate hash → Compare → Import only if changed
+ */
+export const syncWithMaster = async (req: AuthRequest, res: Response) => {
+  try {
+    const config = await prisma.systemConfig.findFirst();
+
+    if (!config) {
+      return res.status(400).json({
+        success: false,
+        message: 'System config not found'
+      });
+    }
+
+    if (config.nodeMode !== 'slave') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot sync. Node mode must be "slave".'
+      });
+    }
+
+    if (!config.connected || !config.masterHost || !config.masterApiKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Not connected to master. Please connect first.'
+      });
+    }
+
+    logger.info('Starting sync from master...', {
+      masterHost: config.masterHost,
+      masterPort: config.masterPort
+    });
+
+    // Download config from master using new node-sync API
+    const masterUrl = `http://${config.masterHost}:${config.masterPort || 3001}/api/node-sync/export`;
+    
+    const response = await axios.get(masterUrl, {
+      headers: {
+        'X-Slave-API-Key': config.masterApiKey
+      },
+      timeout: 30000
+    });
+
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Failed to export config from master');
+    }
+
+    const { hash, config: masterConfig } = response.data.data;
+
+    logger.info('Downloaded config from master', {
+      hash,
+      lastKnownHash: config.lastSyncHash || 'none'
+    });
+
+    // Check if config changed (compare hashes)
+    if (config.lastSyncHash && config.lastSyncHash === hash) {
+      logger.info('Config unchanged (hash match), skipping import');
+      
+      // Update lastConnectedAt anyway
+      await prisma.systemConfig.update({
+        where: { id: config.id },
+        data: {
+          lastConnectedAt: new Date()
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: 'Configuration already up to date (no changes detected)',
+        data: {
+          imported: false,
+          hash,
+          changesApplied: 0,
+          lastSyncAt: new Date().toISOString()
+        }
+      });
+    }
+
+    // Hash changed → Import config
+    logger.info('Config changed (hash mismatch), importing...', {
+      oldHash: config.lastSyncHash || 'none',
+      newHash: hash
+    });
+
+    // Extract JWT token from request
+    const authHeader = req.headers.authorization;
+    const token = authHeader ? authHeader.substring(7) : ''; // Remove 'Bearer '
+
+    // Call import API (internal call to ourselves)
+    const importResponse = await axios.post(
+      `http://localhost:${process.env.PORT || 3001}/api/node-sync/import`,
+      {
+        hash,
+        config: masterConfig
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    if (!importResponse.data.success) {
+      throw new Error(importResponse.data.message || 'Import failed');
+    }
+
+    const importData = importResponse.data.data;
+
+    // Update lastSyncHash
+    await prisma.systemConfig.update({
+      where: { id: config.id },
+      data: {
+        lastSyncHash: hash,
+        lastConnectedAt: new Date()
+      }
+    });
+
+    logger.info(`Sync completed successfully. ${importData.changes} changes applied.`);
+
+    res.json({
+      success: true,
+      message: 'Sync completed successfully',
+      data: {
+        imported: true,
+        hash,
+        changesApplied: importData.changes,
+        details: importData.details,
+        lastSyncAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error: any) {
+    logger.error('Sync with master error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.response?.data?.message || error.message || 'Sync failed'
+    });
+  }
+};

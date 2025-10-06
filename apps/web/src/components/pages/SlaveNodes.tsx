@@ -35,7 +35,8 @@ const SlaveNodes = () => {
   const [masterFormData, setMasterFormData] = useState({
     masterHost: "",
     masterPort: 3001,
-    masterApiKey: ""
+    masterApiKey: "",
+    syncInterval: 60
   });
   
   const [apiKeyDialog, setApiKeyDialog] = useState<{ open: boolean; apiKey: string }>({
@@ -49,6 +50,15 @@ const SlaveNodes = () => {
     newMode: null
   });
 
+  // Delete node confirm dialog
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; nodeId: string | null }>({
+    open: false,
+    nodeId: null
+  });
+
+  // Disconnect confirm dialog
+  const [disconnectDialog, setDisconnectDialog] = useState(false);
+
   // Fetch system configuration
   const { data: systemConfigData, isLoading: isConfigLoading } = useQuery(systemConfigQueryOptions.all);
   const systemConfig = systemConfigData?.data;
@@ -56,7 +66,8 @@ const SlaveNodes = () => {
   // Fetch slave nodes (only in master mode)
   const { data: nodes = [], isLoading: isNodesLoading } = useQuery({
     ...slaveNodesQueryOptions.all,
-    enabled: systemConfig?.nodeMode === 'master'
+    enabled: systemConfig?.nodeMode === 'master',
+    refetchInterval: 30000 // Refetch every 30 seconds to update status
   });
 
   // Update node mode mutation
@@ -100,8 +111,6 @@ const SlaveNodes = () => {
       });
     },
     onError: (error: any) => {
-      console.error('Registration error:', error);
-      
       toast({
         title: "Registration failed",
         description: error.response?.data?.message || "Failed to register node",
@@ -237,10 +246,20 @@ const SlaveNodes = () => {
       return;
     }
 
+    if (masterFormData.syncInterval < 10) {
+      toast({
+        title: "Validation error",
+        description: "Sync interval must be at least 10 seconds",
+        variant: "destructive"
+      });
+      return;
+    }
+
     connectToMasterMutation.mutate({
       masterHost: masterFormData.masterHost,
       masterPort: masterFormData.masterPort,
-      masterApiKey: masterFormData.masterApiKey
+      masterApiKey: masterFormData.masterApiKey,
+      syncInterval: masterFormData.syncInterval
     });
   };
 
@@ -257,13 +276,19 @@ const SlaveNodes = () => {
     setMasterFormData({
       masterHost: "",
       masterPort: 3001,
-      masterApiKey: ""
+      masterApiKey: "",
+      syncInterval: 60
     });
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to remove this node?")) {
-      deleteMutation.mutate(id);
+    setDeleteDialog({ open: true, nodeId: id });
+  };
+
+  const confirmDelete = () => {
+    if (deleteDialog.nodeId) {
+      deleteMutation.mutate(deleteDialog.nodeId);
+      setDeleteDialog({ open: false, nodeId: null });
     }
   };
 
@@ -436,16 +461,6 @@ const SlaveNodes = () => {
                             placeholder="3001"
                           />
                         </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="syncInterval">Sync Interval (seconds)</Label>
-                          <Input
-                            id="syncInterval"
-                            type="number"
-                            value={slaveFormData.syncInterval}
-                            onChange={(e) => setSlaveFormData({ ...slaveFormData, syncInterval: Number(e.target.value) })}
-                            placeholder="60"
-                          />
-                        </div>
                       </div>
                       <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -588,6 +603,19 @@ const SlaveNodes = () => {
                             Get this API key from the master node when registering this slave
                           </p>
                         </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="syncInterval">Sync Interval (seconds)</Label>
+                          <Input
+                            id="syncInterval"
+                            type="number"
+                            value={masterFormData.syncInterval}
+                            onChange={(e) => setMasterFormData({ ...masterFormData, syncInterval: Number(e.target.value) })}
+                            placeholder="60"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            How often to pull configuration from master (minimum: 10 seconds)
+                          </p>
+                        </div>
                       </div>
                       <DialogFooter>
                         <Button variant="outline" onClick={() => setIsMasterDialogOpen(false)}>
@@ -659,11 +687,7 @@ const SlaveNodes = () => {
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => {
-                              if (confirm('Are you sure you want to disconnect from the master node?')) {
-                                disconnectMutation.mutate();
-                              }
-                            }}
+                            onClick={() => setDisconnectDialog(true)}
                             disabled={disconnectMutation.isPending}
                           >
                             {disconnectMutation.isPending ? (
@@ -776,6 +800,73 @@ const SlaveNodes = () => {
           <DialogFooter>
             <Button onClick={() => setApiKeyDialog({ open: false, apiKey: '' })}>
               I've Saved the API Key
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Node Confirmation Dialog */}
+      <Dialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Confirm Deletion
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove this slave node? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setDeleteDialog({ open: false, nodeId: null })}
+              disabled={deleteMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete Node'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Disconnect Confirmation Dialog */}
+      <Dialog open={disconnectDialog} onOpenChange={setDisconnectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-yellow-500" />
+              Confirm Disconnect
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to disconnect from the master node? You will need to reconnect manually.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setDisconnectDialog(false)}
+              disabled={disconnectMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => {
+                disconnectMutation.mutate();
+                setDisconnectDialog(false);
+              }}
+              disabled={disconnectMutation.isPending}
+            >
+              {disconnectMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {disconnectMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -14,6 +14,7 @@ import dashboardRoutes from './dashboard.routes';
 import backupRoutes from './backup.routes';
 import slaveRoutes from './slave.routes';
 import systemConfigRoutes from './system-config.routes';
+import nodeSyncRoutes from './node-sync.routes';
 
 const router = Router();
 
@@ -42,5 +43,6 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/backup', backupRoutes);
 router.use('/slave', slaveRoutes);
 router.use('/system-config', systemConfigRoutes);
+router.use('/node-sync', nodeSyncRoutes);
 
 export default router;

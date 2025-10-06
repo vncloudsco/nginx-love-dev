@@ -43,6 +43,7 @@ export const systemConfigService = {
     masterHost: string;
     masterPort: number;
     masterApiKey: string;
+    syncInterval?: number;
   }): Promise<ApiResponse<SystemConfig>> => {
     const response = await axios.post(
       `${API_URL}/system-config/connect-master`,

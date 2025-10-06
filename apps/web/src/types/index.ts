@@ -291,6 +291,7 @@ export interface SystemConfig {
   masterHost?: string | null;
   masterPort?: number | null;
   masterApiKey?: string | null;
+  syncInterval: number; // Sync interval in seconds
   
   // Connection status (for slave mode)
   connected: boolean;

@@ -5,7 +5,8 @@ import {
   updateNodeMode,
   connectToMaster,
   disconnectFromMaster,
-  testMasterConnection
+  testMasterConnection,
+  syncWithMaster
 } from '../controllers/system-config.controller';
 
 const router = Router();
@@ -21,5 +22,6 @@ router.put('/node-mode', updateNodeMode);
 router.post('/connect-master', connectToMaster);
 router.post('/disconnect-master', disconnectFromMaster);
 router.post('/test-master-connection', testMasterConnection);
+router.post('/sync', syncWithMaster);
 
 export default router;
