@@ -4,8 +4,14 @@ import logger from '../utils/logger';
 import prisma from '../config/database';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 const BACKUP_DIR = process.env.BACKUP_DIR || '/var/backups/nginx-love';
+const NGINX_SITES_AVAILABLE = '/etc/nginx/sites-available';
+const NGINX_SITES_ENABLED = '/etc/nginx/sites-enabled';
 const SSL_CERTS_PATH = '/etc/nginx/ssl';
 
 /**
@@ -17,6 +23,38 @@ async function ensureBackupDir(): Promise<void> {
   } catch (error) {
     logger.error('Failed to create backup directory:', error);
     throw new Error('Failed to create backup directory');
+  }
+}
+
+/**
+ * Reload nginx configuration
+ */
+async function reloadNginx(): Promise<boolean> {
+  try {
+    // Test nginx configuration first
+    logger.info('Testing nginx configuration...');
+    await execAsync('nginx -t');
+    
+    // Reload nginx
+    logger.info('Reloading nginx...');
+    await execAsync('systemctl reload nginx');
+    
+    logger.info('Nginx reloaded successfully');
+    return true;
+  } catch (error: any) {
+    logger.error('Failed to reload nginx:', error);
+    logger.error('Nginx test/reload output:', error.stdout || error.stderr);
+    
+    // Try alternative reload methods
+    try {
+      logger.info('Trying alternative reload method...');
+      await execAsync('nginx -s reload');
+      logger.info('Nginx reloaded successfully (alternative method)');
+      return true;
+    } catch (altError) {
+      logger.error('Alternative reload also failed:', altError);
+      return false;
+    }
   }
 }
 
@@ -396,45 +434,115 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
 
     const results = {
       domains: 0,
+      vhostConfigs: 0,
+      upstreams: 0,
+      loadBalancers: 0,
       ssl: 0,
       sslFiles: 0,
-      modsec: 0,
+      modsecCRS: 0,
+      modsecCustom: 0,
       acl: 0,
       alertChannels: 0,
-      alertRules: 0
+      alertRules: 0,
+      users: 0,
+      nginxConfigs: 0
     };
 
-    // Restore domains (if present)
+    // 1. Restore domains with all configurations
     if (backupData.domains && Array.isArray(backupData.domains)) {
-      for (const domain of backupData.domains) {
+      for (const domainData of backupData.domains) {
         try {
           // Create or update domain
-          await prisma.domain.upsert({
-            where: { name: domain.name },
+          const domain = await prisma.domain.upsert({
+            where: { name: domainData.name },
             update: {
-              status: domain.status,
-              sslEnabled: domain.sslEnabled,
-              modsecEnabled: domain.modsecEnabled
+              status: domainData.status,
+              sslEnabled: domainData.sslEnabled,
+              modsecEnabled: domainData.modsecEnabled
             },
             create: {
-              name: domain.name,
-              status: domain.status,
-              sslEnabled: domain.sslEnabled,
-              modsecEnabled: domain.modsecEnabled
+              name: domainData.name,
+              status: domainData.status,
+              sslEnabled: domainData.sslEnabled,
+              modsecEnabled: domainData.modsecEnabled
             }
           });
           results.domains++;
+
+          // Restore upstreams
+          if (domainData.upstreams && Array.isArray(domainData.upstreams)) {
+            // Delete existing upstreams for this domain
+            await prisma.upstream.deleteMany({
+              where: { domainId: domain.id }
+            });
+
+            // Create new upstreams
+            for (const upstream of domainData.upstreams) {
+              await prisma.upstream.create({
+                data: {
+                  domainId: domain.id,
+                  host: upstream.host,
+                  port: upstream.port,
+                  protocol: upstream.protocol || 'http',
+                  sslVerify: upstream.sslVerify ?? false,
+                  weight: upstream.weight || 1,
+                  maxFails: upstream.maxFails || 3,
+                  failTimeout: upstream.failTimeout || 30,
+                  status: upstream.status || 'up'
+                }
+              });
+              results.upstreams++;
+            }
+          }
+
+          // Restore load balancer config
+          if (domainData.loadBalancer) {
+            const lb = domainData.loadBalancer;
+            // Check if healthCheck exists (legacy format)
+            const healthCheck = lb.healthCheck || {};
+            
+            await prisma.loadBalancerConfig.upsert({
+              where: { domainId: domain.id },
+              update: {
+                algorithm: lb.algorithm || 'round_robin',
+                healthCheckEnabled: lb.healthCheckEnabled ?? healthCheck.enabled ?? true,
+                healthCheckInterval: lb.healthCheckInterval ?? healthCheck.interval ?? 30,
+                healthCheckTimeout: lb.healthCheckTimeout ?? healthCheck.timeout ?? 5,
+                healthCheckPath: lb.healthCheckPath ?? healthCheck.path ?? '/'
+              },
+              create: {
+                domainId: domain.id,
+                algorithm: lb.algorithm || 'round_robin',
+                healthCheckEnabled: lb.healthCheckEnabled ?? healthCheck.enabled ?? true,
+                healthCheckInterval: lb.healthCheckInterval ?? healthCheck.interval ?? 30,
+                healthCheckTimeout: lb.healthCheckTimeout ?? healthCheck.timeout ?? 5,
+                healthCheckPath: lb.healthCheckPath ?? healthCheck.path ?? '/'
+              }
+            });
+            results.loadBalancers++;
+          }
+
+          // Restore nginx vhost configuration file
+          if (domainData.vhostConfig) {
+            await writeNginxVhostConfig(
+              domainData.name,
+              domainData.vhostConfig,
+              domainData.vhostEnabled ?? true
+            );
+            results.vhostConfigs++;
+            logger.info(`Nginx vhost config restored for: ${domainData.name}`);
+          }
+
         } catch (error) {
-          logger.error(`Failed to restore domain ${domain.name}:`, error);
+          logger.error(`Failed to restore domain ${domainData.name}:`, error);
         }
       }
     }
 
-    // Restore SSL certificates (if present)
+    // 2. Restore SSL certificates with files
     if (backupData.ssl && Array.isArray(backupData.ssl)) {
       for (const sslCert of backupData.ssl) {
         try {
-          // Find domain by name
           const domain = await prisma.domain.findUnique({
             where: { name: sslCert.domainName }
           });
@@ -446,7 +554,6 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
 
           // Restore SSL certificate files if present
           if (sslCert.files && sslCert.files.certificate && sslCert.files.privateKey) {
-            // Create or update SSL certificate in database with actual certificate content
             await prisma.sSLCertificate.upsert({
               where: { domainId: domain.id },
               update: {
@@ -459,22 +566,20 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
                 autoRenew: sslCert.autoRenew || false
               },
               create: {
-                domain: {
-                  connect: { id: domain.id }
-                },
+                domain: { connect: { id: domain.id } },
                 commonName: sslCert.commonName,
                 sans: sslCert.sans || [],
                 issuer: sslCert.issuer,
                 certificate: sslCert.files.certificate,
                 privateKey: sslCert.files.privateKey,
                 chain: sslCert.files.chain || null,
-                validFrom: new Date(),
-                validTo: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days from now
+                validFrom: sslCert.validFrom ? new Date(sslCert.validFrom) : new Date(),
+                validTo: sslCert.validTo ? new Date(sslCert.validTo) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
                 autoRenew: sslCert.autoRenew || false
               }
             });
 
-            // Also write files to disk
+            // Write files to disk
             await writeSSLCertificateFiles(sslCert.domainName, {
               certificate: sslCert.files.certificate,
               privateKey: sslCert.files.privateKey,
@@ -483,33 +588,6 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
             
             results.ssl++;
             results.sslFiles++;
-            logger.info(`SSL certificate and files restored for domain: ${sslCert.domainName}`);
-          } else {
-            // Only create DB record if no files
-            await prisma.sSLCertificate.upsert({
-              where: { domainId: domain.id },
-              update: {
-                commonName: sslCert.commonName,
-                sans: sslCert.sans || [],
-                issuer: sslCert.issuer,
-                autoRenew: sslCert.autoRenew || false
-              },
-              create: {
-                domain: {
-                  connect: { id: domain.id }
-                },
-                commonName: sslCert.commonName,
-                sans: sslCert.sans || [],
-                issuer: sslCert.issuer,
-                certificate: '', // Empty placeholder
-                privateKey: '', // Empty placeholder
-                validFrom: new Date(),
-                validTo: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-                autoRenew: sslCert.autoRenew || false
-              }
-            });
-            results.ssl++;
-            logger.info(`SSL metadata restored for domain: ${sslCert.domainName} (no files)`);
           }
         } catch (error) {
           logger.error(`Failed to restore SSL cert for ${sslCert.domainName}:`, error);
@@ -517,7 +595,60 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
       }
     }
 
-    // Restore ACL rules (if present)
+    // 3. Restore ModSecurity configurations
+    if (backupData.modsec) {
+      // Restore CRS rules
+      if (backupData.modsec.crsRules && Array.isArray(backupData.modsec.crsRules)) {
+        for (const rule of backupData.modsec.crsRules) {
+          try {
+            await prisma.modSecCRSRule.upsert({
+              where: {
+                ruleFile_domainId: {
+                  ruleFile: rule.ruleFile,
+                  domainId: rule.domainId || null
+                }
+              },
+              update: {
+                enabled: rule.enabled
+              },
+              create: {
+                ruleFile: rule.ruleFile,
+                domainId: rule.domainId || null,
+                name: rule.name || rule.ruleFile,
+                category: rule.category || 'OWASP',
+                paranoia: rule.paranoia || 1,
+                enabled: rule.enabled
+              }
+            });
+            results.modsecCRS++;
+          } catch (error) {
+            logger.error(`Failed to restore CRS rule ${rule.ruleFile}:`, error);
+          }
+        }
+      }
+
+      // Restore custom rules
+      if (backupData.modsec.customRules && Array.isArray(backupData.modsec.customRules)) {
+        for (const rule of backupData.modsec.customRules) {
+          try {
+            await prisma.modSecRule.create({
+              data: {
+                domainId: rule.domainId,
+                name: rule.name,
+                ruleContent: rule.content || rule.ruleContent || '',
+                enabled: rule.enabled,
+                category: rule.category || 'custom'
+              }
+            });
+            results.modsecCustom++;
+          } catch (error) {
+            logger.error(`Failed to restore custom ModSec rule ${rule.name}:`, error);
+          }
+        }
+      }
+    }
+
+    // 4. Restore ACL rules
     if (backupData.acl && Array.isArray(backupData.acl)) {
       for (const rule of backupData.acl) {
         try {
@@ -539,7 +670,7 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
       }
     }
 
-    // Restore notification channels (if present)
+    // 5. Restore notification channels
     if (backupData.notificationChannels && Array.isArray(backupData.notificationChannels)) {
       for (const channel of backupData.notificationChannels) {
         try {
@@ -558,15 +689,134 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
       }
     }
 
+    // 6. Restore alert rules
+    if (backupData.alertRules && Array.isArray(backupData.alertRules)) {
+      for (const rule of backupData.alertRules) {
+        try {
+          const alertRule = await prisma.alertRule.create({
+            data: {
+              name: rule.name,
+              condition: rule.condition,
+              threshold: rule.threshold,
+              severity: rule.severity,
+              enabled: rule.enabled
+            }
+          });
+
+          // Link channels
+          if (rule.channels && Array.isArray(rule.channels)) {
+            for (const channelName of rule.channels) {
+              const channel = await prisma.notificationChannel.findFirst({
+                where: { name: channelName }
+              });
+              if (channel) {
+                await prisma.alertRuleChannel.create({
+                  data: {
+                    ruleId: alertRule.id,
+                    channelId: channel.id
+                  }
+                });
+              }
+            }
+          }
+          results.alertRules++;
+        } catch (error) {
+          logger.error(`Failed to restore alert rule ${rule.name}:`, error);
+        }
+      }
+    }
+
+    // 7. Restore users (NOTE: Passwords are excluded for security)
+    if (backupData.users && Array.isArray(backupData.users)) {
+      for (const userData of backupData.users) {
+        try {
+          // Check if user already exists
+          const existingUser = await prisma.user.findUnique({
+            where: { username: userData.username }
+          });
+
+          if (existingUser) {
+            logger.info(`User ${userData.username} already exists, skipping`);
+            continue;
+          }
+
+          // Create user with default password (must be changed on first login)
+          const user = await prisma.user.create({
+            data: {
+              username: userData.username,
+              email: userData.email,
+              fullName: userData.profile?.fullName || userData.username,
+              password: 'CHANGE_ME_ON_FIRST_LOGIN', // Placeholder
+              role: userData.role,
+              status: 'inactive' // Force inactive until password is set
+            }
+          });
+
+          // Create profile if exists
+          if (userData.profile) {
+            await prisma.userProfile.create({
+              data: {
+                userId: user.id,
+                bio: userData.profile.bio,
+                location: userData.profile.location,
+                website: userData.profile.website
+              }
+            });
+          }
+
+          results.users++;
+          logger.info(`User ${userData.username} restored (password must be reset)`);
+        } catch (error) {
+          logger.error(`Failed to restore user ${userData.username}:`, error);
+        }
+      }
+    }
+
+    // 8. Restore nginx global configs
+    if (backupData.nginxConfigs && Array.isArray(backupData.nginxConfigs)) {
+      for (const config of backupData.nginxConfigs) {
+        try {
+          await prisma.nginxConfig.upsert({
+            where: { id: config.id },
+            update: {
+              content: config.content || config.config || config.value || '',
+              enabled: config.enabled ?? true
+            },
+            create: {
+              id: config.id,
+              configType: config.configType || 'main',
+              name: config.name || 'config',
+              content: config.content || config.config || config.value || '',
+              enabled: config.enabled ?? true
+            }
+          });
+          results.nginxConfigs++;
+        } catch (error) {
+          logger.error(`Failed to restore nginx config ${config.id}:`, error);
+        }
+      }
+    }
+
     logger.info('Configuration imported successfully', {
       userId: req.user?.userId,
       results
     });
 
+    // Reload nginx to apply all changes
+    logger.info('Reloading nginx after restore...');
+    const nginxReloaded = await reloadNginx();
+    
+    if (!nginxReloaded) {
+      logger.warn('Nginx reload failed, but restore completed. Manual reload may be required.');
+    }
+
     res.json({
       success: true,
-      message: 'Configuration imported successfully',
-      data: results
+      message: nginxReloaded 
+        ? 'Configuration restored successfully and nginx reloaded' 
+        : 'Configuration restored successfully, but nginx reload failed. Please reload manually.',
+      data: results,
+      nginxReloaded
     });
   } catch (error) {
     logger.error('Import config error:', error);
@@ -706,6 +956,64 @@ export const deleteBackupFile = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
+ * Helper function to read nginx vhost configuration file for a domain
+ */
+async function readNginxVhostConfig(domainName: string) {
+  try {
+    const vhostPath = path.join(NGINX_SITES_AVAILABLE, domainName);
+    const vhostConfig = await fs.readFile(vhostPath, 'utf-8');
+    
+    // Check if symlink exists in sites-enabled
+    let isEnabled = false;
+    try {
+      const enabledPath = path.join(NGINX_SITES_ENABLED, domainName);
+      await fs.access(enabledPath);
+      isEnabled = true;
+    } catch {
+      isEnabled = false;
+    }
+
+    return {
+      domainName,
+      config: vhostConfig,
+      enabled: isEnabled
+    };
+  } catch (error) {
+    logger.warn(`Nginx vhost config not found for ${domainName}`);
+    return null;
+  }
+}
+
+/**
+ * Helper function to write nginx vhost configuration file for a domain
+ */
+async function writeNginxVhostConfig(domainName: string, config: string, enabled: boolean = true) {
+  try {
+    await fs.mkdir(NGINX_SITES_AVAILABLE, { recursive: true });
+    await fs.mkdir(NGINX_SITES_ENABLED, { recursive: true });
+
+    const vhostPath = path.join(NGINX_SITES_AVAILABLE, domainName);
+    await fs.writeFile(vhostPath, config, 'utf-8');
+    logger.info(`Nginx vhost config written for ${domainName}`);
+
+    // Create symlink in sites-enabled if enabled
+    if (enabled) {
+      const enabledPath = path.join(NGINX_SITES_ENABLED, domainName);
+      try {
+        await fs.unlink(enabledPath);
+      } catch {
+        // Ignore if doesn't exist
+      }
+      await fs.symlink(vhostPath, enabledPath);
+      logger.info(`Nginx vhost enabled for ${domainName}`);
+    }
+  } catch (error) {
+    logger.error(`Error writing nginx vhost config for ${domainName}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Helper function to read SSL certificate files for a domain
  */
 async function readSSLCertificateFiles(domainName: string) {
@@ -788,7 +1096,7 @@ async function writeSSLCertificateFiles(domainName: string, sslFiles: {
  * Helper function to collect all backup data
  */
 async function collectBackupData() {
-  // Get all domains
+  // Get all domains with full relations
   const domains = await prisma.domain.findMany({
     include: {
       upstreams: true,
@@ -796,6 +1104,25 @@ async function collectBackupData() {
       sslCertificate: true
     }
   });
+
+  // Read nginx vhost config files for each domain
+  const domainsWithVhostConfig = await Promise.all(
+    domains.map(async (d) => {
+      const vhostConfig = await readNginxVhostConfig(d.name);
+      
+      return {
+        name: d.name,
+        status: d.status,
+        sslEnabled: d.sslEnabled,
+        modsecEnabled: d.modsecEnabled,
+        upstreams: d.upstreams,
+        loadBalancer: d.loadBalancer,
+        // Include nginx vhost configuration file
+        vhostConfig: vhostConfig?.config,
+        vhostEnabled: vhostConfig?.enabled
+      };
+    })
+  );
 
   // Get all SSL certificates with actual certificate files
   const ssl = await prisma.sSLCertificate.findMany({
@@ -813,7 +1140,9 @@ async function collectBackupData() {
           commonName: s.commonName,
           sans: s.sans,
           issuer: s.issuer,
-          autoRenew: s.autoRenew
+          autoRenew: s.autoRenew,
+          validFrom: s.validFrom,
+          validTo: s.validTo
         };
       }
 
@@ -825,6 +1154,8 @@ async function collectBackupData() {
         sans: s.sans,
         issuer: s.issuer,
         autoRenew: s.autoRenew,
+        validFrom: s.validFrom,
+        validTo: s.validTo,
         // Include actual certificate files
         files: sslFiles
       };
@@ -836,6 +1167,9 @@ async function collectBackupData() {
 
   // Get ModSecurity custom rules
   const modsecCustomRules = await prisma.modSecRule.findMany();
+
+  // Get ModSecurity global settings
+  const modsecGlobalSettings = await prisma.nginxConfig.findMany();
 
   // Get ACL rules
   const aclRules = await prisma.aclRule.findMany();
@@ -854,25 +1188,40 @@ async function collectBackupData() {
     }
   });
 
+  // Get all users (excluding passwords for security)
+  const users = await prisma.user.findMany({
+    include: {
+      profile: true
+    }
+  });
+
+  // Remove password from users
+  const usersWithoutPassword = users.map(u => {
+    const { password, ...userWithoutPassword } = u;
+    return userWithoutPassword;
+  });
+
   // Get nginx configs
   const nginxConfigs = await prisma.nginxConfig.findMany();
 
   return {
-    version: '1.0',
+    version: '2.0', // Bumped version for complete backup
     timestamp: new Date().toISOString(),
-    domains: domains.map(d => ({
-      name: d.name,
-      status: d.status,
-      sslEnabled: d.sslEnabled,
-      modsecEnabled: d.modsecEnabled,
-      upstreams: d.upstreams,
-      loadBalancer: d.loadBalancer
-    })),
+    
+    // Domain configurations with vhost files
+    domains: domainsWithVhostConfig,
+    
+    // SSL certificates with actual files
     ssl: sslWithFiles,
+    
+    // ModSecurity configurations
     modsec: {
+      globalSettings: modsecGlobalSettings,
       crsRules: modsecCRSRules,
       customRules: modsecCustomRules
     },
+    
+    // ACL rules
     acl: aclRules.map(r => ({
       name: r.name,
       type: r.type,
@@ -884,6 +1233,8 @@ async function collectBackupData() {
       action: r.action,
       enabled: r.enabled
     })),
+    
+    // Alert and notification configurations
     notificationChannels,
     alertRules: alertRules.map(r => ({
       name: r.name,
@@ -893,6 +1244,11 @@ async function collectBackupData() {
       enabled: r.enabled,
       channels: r.channels.map(c => c.channel.name)
     })),
+    
+    // Users (without passwords)
+    users: usersWithoutPassword,
+    
+    // Global nginx configurations
     nginxConfigs
   };
 }

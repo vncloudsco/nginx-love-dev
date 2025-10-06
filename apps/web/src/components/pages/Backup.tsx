@@ -20,6 +20,8 @@ const Backup = () => {
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -183,41 +185,54 @@ const Backup = () => {
     }
   };
 
-  const handleImportConfig = async () => {
+  const handleImportConfig = () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/json';
     
-    input.onchange = async (e: Event) => {
+    input.onchange = (e: Event) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-
-      try {
-        setImportLoading(true);
-        const text = await file.text();
-        const data = JSON.parse(text);
-        
-        const result = await backupService.importConfig(data);
-        
-        toast({ 
-          title: "Import successful",
-          description: `Restored: ${result.domains} domains, ${result.ssl} SSL certs${result.sslFiles ? ` (${result.sslFiles} with files)` : ''}, ${result.acl} ACL rules, ${result.modsec} ModSec rules`
-        });
-        
-        // Reload data
-        loadBackupSchedules();
-      } catch (error: any) {
-        toast({ 
-          title: "Import failed",
-          description: error.response?.data?.message || "Failed to import configuration. Please check the file format.",
-          variant: "destructive"
-        });
-      } finally {
-        setImportLoading(false);
-      }
+      
+      // Show confirmation dialog first
+      setPendingImportFile(file);
+      setImportConfirmOpen(true);
     };
     
     input.click();
+  };
+
+  const confirmImport = async () => {
+    if (!pendingImportFile) return;
+
+    try {
+      setImportLoading(true);
+      setImportConfirmOpen(false);
+      
+      const text = await pendingImportFile.text();
+      const data = JSON.parse(text);
+      
+      const result = await backupService.importConfig(data);
+      
+      toast({ 
+        title: "✅ Restore successful!",
+        description: `Restored: ${result.domains} domains, ${result.vhostConfigs} vhost configs, ${result.upstreams} upstreams, ${result.loadBalancers} LB configs, ${result.ssl} SSL certs (${result.sslFiles} files), ${result.modsecCRS + result.modsecCustom} ModSec rules, ${result.acl} ACL rules, ${result.alertChannels} channels, ${result.alertRules} alerts, ${result.users} users, ${result.nginxConfigs} configs. Nginx has been reloaded.`,
+        duration: 10000
+      });
+      
+      // Reload data
+      loadBackupSchedules();
+      setPendingImportFile(null);
+    } catch (error: any) {
+      toast({ 
+        title: "❌ Restore failed",
+        description: error.response?.data?.message || "Failed to restore configuration. Please check the file format.",
+        variant: "destructive",
+        duration: 8000
+      });
+    } finally {
+      setImportLoading(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -457,6 +472,85 @@ const Backup = () => {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Import/Restore Confirmation Dialog */}
+      <AlertDialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-xl">
+              <FileArchive className="h-6 w-6 text-orange-500" />
+              ⚠️ Confirm Configuration Restore
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4 pt-4">
+              <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                <p className="font-semibold text-orange-900 dark:text-orange-100 mb-2">
+                  🚨 CRITICAL WARNING - Data Replacement
+                </p>
+                <p className="text-sm text-orange-800 dark:text-orange-200">
+                  Restoring this backup will <strong className="font-bold">REPLACE ALL existing data</strong> on this server with data from the backup file.
+                </p>
+              </div>
+
+              <div className="space-y-3 text-sm">
+                <p className="font-semibold text-foreground">The following will be REPLACED:</p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground pl-2">
+                  <li><strong>Domains</strong>: All domain configurations, upstreams, load balancers</li>
+                  <li><strong>Nginx Configs</strong>: Virtual host files in /etc/nginx/sites-available/</li>
+                  <li><strong>SSL Certificates</strong>: Certificate files (.crt, .key) in /etc/nginx/ssl/</li>
+                  <li><strong>ModSecurity Rules</strong>: CRS rules and custom security rules</li>
+                  <li><strong>ACL Rules</strong>: All access control configurations</li>
+                  <li><strong>Alert Settings</strong>: Notification channels and alert rules</li>
+                  <li><strong>Users</strong>: User accounts (passwords must be reset)</li>
+                  <li><strong>System Configs</strong>: Global nginx configurations</li>
+                </ul>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                  ✅ After Restore:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-blue-800 dark:text-blue-200 pl-2">
+                  <li>Nginx will be automatically reloaded</li>
+                  <li>Domains will be immediately accessible with restored configurations</li>
+                  <li>SSL certificates will be active and functional</li>
+                  <li>Users will need to reset their passwords (security measure)</li>
+                </ul>
+              </div>
+
+              <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                <p className="text-sm text-yellow-900 dark:text-yellow-100">
+                  💡 <strong>Recommendation:</strong> Create a backup of your current configuration before proceeding with the restore.
+                </p>
+              </div>
+
+              <p className="text-sm font-semibold text-foreground pt-2">
+                Do you want to proceed with the restore?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingImportFile(null)}>
+              Cancel - Keep Current Data
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmImport}
+              className="bg-orange-600 text-white hover:bg-orange-700"
+              disabled={importLoading}
+            >
+              {importLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Restoring...
+                </>
+              ) : (
+                <>
+                  Confirm - Restore Backup
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

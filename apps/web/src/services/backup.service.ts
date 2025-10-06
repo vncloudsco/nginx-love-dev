@@ -40,12 +40,18 @@ export interface UpdateBackupScheduleRequest {
 
 export interface ImportResult {
   domains: number;
+  vhostConfigs: number;
+  upstreams: number;
+  loadBalancers: number;
   ssl: number;
-  sslFiles?: number;
-  modsec: number;
+  sslFiles: number;
+  modsecCRS: number;
+  modsecCustom: number;
   acl: number;
   alertChannels: number;
   alertRules: number;
+  users: number;
+  nginxConfigs: number;
 }
 
 export const backupService = {
