@@ -39,74 +39,85 @@ export interface SlaveNodeWithLogs extends SlaveNode {
   syncLogs?: SyncLog[];
 }
 
-class SlaveNodeService {
-  private getHeaders() {
-    const token = localStorage.getItem('accessToken');
-    return {
-      'Content-Type': 'application/json',
-      Authorization: token ? `Bearer ${token}` : '',
-    };
-  }
+// Helper function to get headers
+const getHeaders = () => {
+  const token = localStorage.getItem('accessToken');
+  return {
+    'Content-Type': 'application/json',
+    Authorization: token ? `Bearer ${token}` : '',
+  };
+};
 
+class SlaveNodeService {
   async getAll(): Promise<SlaveNode[]> {
     const response = await axios.get(`${API_URL}/slave/nodes`, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
     });
     return response.data.data;
   }
 
   async getById(id: string): Promise<SlaveNodeWithLogs> {
     const response = await axios.get(`${API_URL}/slave/nodes/${id}`, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
     });
     return response.data.data;
   }
 
   async register(data: RegisterSlaveNodeRequest) {
-    const response = await axios.post(`${API_URL}/slave/nodes`, data, {
-      headers: this.getHeaders(),
-    });
-    return response.data;
+    console.log('SlaveNodeService.register called with:', data);
+    console.log('API_URL:', API_URL);
+    console.log('Headers:', getHeaders());
+    
+    try {
+      const response = await axios.post(`${API_URL}/slave/nodes`, data, {
+        headers: getHeaders(),
+      });
+      console.log('Register response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Register error:', error.response?.data || error.message);
+      throw error;
+    }
   }
 
   async update(id: string, data: UpdateSlaveNodeRequest) {
     const response = await axios.put(`${API_URL}/slave/nodes/${id}`, data, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
     });
     return response.data;
   }
 
   async delete(id: string) {
     const response = await axios.delete(`${API_URL}/slave/nodes/${id}`, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
     });
     return response.data;
   }
 
   async syncToNode(id: string, data: SyncConfigRequest = {}) {
     const response = await axios.post(`${API_URL}/slave/nodes/${id}/sync`, data, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
     });
     return response.data;
   }
 
   async syncToAll() {
     const response = await axios.post(`${API_URL}/slave/nodes/sync-all`, {}, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
     });
     return response.data;
   }
 
   async getStatus(id: string) {
     const response = await axios.get(`${API_URL}/slave/nodes/${id}/status`, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
     });
     return response.data;
   }
 
   async getSyncHistory(id: string, limit: number = 50) {
     const response = await axios.get(`${API_URL}/slave/nodes/${id}/sync-history`, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
       params: { limit },
     });
     return response.data.data;
@@ -114,7 +125,7 @@ class SlaveNodeService {
 
   async regenerateApiKey(id: string) {
     const response = await axios.post(`${API_URL}/slave/nodes/${id}/regenerate-key`, {}, {
-      headers: this.getHeaders(),
+      headers: getHeaders(),
     });
     return response.data;
   }

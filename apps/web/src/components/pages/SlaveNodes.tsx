@@ -24,6 +24,10 @@ const SlaveNodes = () => {
     port: 3001,
     syncInterval: 60
   });
+  const [apiKeyDialog, setApiKeyDialog] = useState<{ open: boolean; apiKey: string }>({
+    open: false,
+    apiKey: ''
+  });
 
   // Fetch slave nodes
   const { data: nodes = [], isLoading } = useQuery(slaveNodesQueryOptions.all);
@@ -36,18 +40,36 @@ const SlaveNodes = () => {
       setIsDialogOpen(false);
       resetForm();
       
-      // Show API key in toast (only shown once)
+      // Show API key in separate dialog (critical info!)
+      setApiKeyDialog({
+        open: true,
+        apiKey: data.data.apiKey
+      });
+      
+      // Also show toast
       toast({ 
-        title: "Slave node registered",
-        description: `API Key: ${data.data.apiKey} (save this, it won't be shown again)`,
-        duration: 10000
+        title: "Slave node registered successfully",
+        description: `Node ${data.data.name} has been registered`,
       });
     },
     onError: (error: any) => {
+      console.error('Registration error:', error);
+      
+      let errorMessage = "Failed to register node";
+      
+      if (error.response?.status === 401) {
+        errorMessage = "Authentication required. Please login first.";
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Registration failed",
-        description: error.response?.data?.message || "Failed to register node",
-        variant: "destructive"
+        description: errorMessage,
+        variant: "destructive",
+        duration: 5000
       });
     }
   });
@@ -117,6 +139,8 @@ const SlaveNodes = () => {
       return;
     }
 
+    console.log('Registering node:', formData);
+    
     registerMutation.mutate({
       name: formData.name,
       host: formData.host,
@@ -177,6 +201,9 @@ const SlaveNodes = () => {
     return !!node.configHash && node.lastSyncAt;
   };
 
+  // Check authentication
+  const isAuthenticated = !!localStorage.getItem('accessToken');
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -187,6 +214,25 @@ const SlaveNodes = () => {
 
   return (
     <div className="space-y-6">
+      {/* Authentication Warning */}
+      {!isAuthenticated && (
+        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              <div>
+                <p className="font-medium text-yellow-800 dark:text-yellow-200">
+                  Authentication Required
+                </p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  You need to login to register and manage slave nodes.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-lg">
@@ -202,7 +248,7 @@ const SlaveNodes = () => {
             size="sm" 
             variant="outline"
             onClick={handleSyncAll}
-            disabled={syncAllMutation.isPending || nodes.length === 0}
+            disabled={syncAllMutation.isPending || nodes.length === 0 || !isAuthenticated}
           >
             {syncAllMutation.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -213,7 +259,7 @@ const SlaveNodes = () => {
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm">
+              <Button size="sm" disabled={!isAuthenticated}>
                 <Server className="h-4 w-4 mr-2" />
                 Register Node
               </Button>
@@ -267,9 +313,74 @@ const SlaveNodes = () => {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddNode} disabled={registerMutation.isPending}>
+                <Button 
+                  onClick={handleAddNode} 
+                  disabled={registerMutation.isPending || !formData.name || !formData.host}
+                >
                   {registerMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Register Node
+                  {registerMutation.isPending ? 'Registering...' : 'Register Node'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* API Key Dialog - Critical Information */}
+          <Dialog open={apiKeyDialog.open} onOpenChange={(open) => setApiKeyDialog({ ...apiKeyDialog, open })}>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-yellow-500" />
+                  Save Your API Key
+                </DialogTitle>
+                <DialogDescription>
+                  This is the only time you'll see this API key. Copy it now and store it securely.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-2">
+                    ⚠️ Important: You will need this API key to configure your slave node.
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="apiKey">API Key</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="apiKey"
+                      value={apiKeyDialog.apiKey}
+                      readOnly
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(apiKeyDialog.apiKey);
+                        toast({
+                          title: "Copied!",
+                          description: "API key copied to clipboard"
+                        });
+                      }}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-muted rounded-lg space-y-2">
+                  <p className="text-sm font-medium">Next Steps:</p>
+                  <ol className="text-sm space-y-1 list-decimal list-inside">
+                    <li>Copy the API key above</li>
+                    <li>Save it in your slave node's environment variables</li>
+                    <li>Configure: <code className="text-xs bg-background px-1 py-0.5 rounded">SLAVE_API_KEY={apiKeyDialog.apiKey.substring(0, 16)}...</code></li>
+                    <li>Start your slave node application</li>
+                  </ol>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setApiKeyDialog({ open: false, apiKey: '' })}>
+                  I've Saved the API Key
                 </Button>
               </DialogFooter>
             </DialogContent>
