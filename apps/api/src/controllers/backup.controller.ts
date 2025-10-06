@@ -751,38 +751,63 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
     if (backupData.users && Array.isArray(backupData.users)) {
       for (const userData of backupData.users) {
         try {
-          // Check if user already exists
-          const existingUser = await prisma.user.findUnique({
-            where: { username: userData.username }
+          // Upsert user: create if not exists, update if exists (including password)
+          const user = await prisma.user.upsert({
+            where: { username: userData.username },
+            update: {
+              email: userData.email,
+              password: userData.password, // RESTORE password from backup
+              fullName: userData.fullName || userData.username,
+              status: userData.status || 'active',
+              role: userData.role || 'viewer',
+              avatar: userData.avatar,
+              phone: userData.phone,
+              timezone: userData.timezone || 'UTC',
+              language: userData.language || 'en',
+              lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : null
+            },
+            create: {
+              username: userData.username,
+              email: userData.email,
+              password: userData.password, // Use hashed password from backup
+              fullName: userData.fullName || userData.username,
+              status: userData.status || 'active',
+              role: userData.role || 'viewer',
+              avatar: userData.avatar,
+              phone: userData.phone,
+              timezone: userData.timezone || 'UTC',
+              language: userData.language || 'en',
+              lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : null,
+              profile: userData.profile ? {
+                create: {
+                  bio: userData.profile.bio || null,
+                  location: userData.profile.location || null,
+                  website: userData.profile.website || null
+                }
+              } : undefined
+            }
           });
 
-          if (!existingUser) {
-            // Create user with password from backup (already hashed)
-            await prisma.user.create({
-              data: {
-                username: userData.username,
-                email: userData.email,
-                password: userData.password, // Use hashed password from backup
-                fullName: userData.fullName || userData.username,
-                status: userData.status || 'active', // Keep original status
-                role: userData.role || 'viewer',
-                avatar: userData.avatar,
-                phone: userData.phone,
-                timezone: userData.timezone || 'UTC',
-                language: userData.language || 'en',
-                lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : null,
-                profile: userData.profile ? {
-                  create: {
-                    bio: userData.profile.bio || null,
-                    location: userData.profile.location || null,
-                    website: userData.profile.website || null
-                  }
-                } : undefined
+          // Update or create profile if exists
+          if (userData.profile) {
+            await prisma.userProfile.upsert({
+              where: { userId: user.id },
+              update: {
+                bio: userData.profile.bio || null,
+                location: userData.profile.location || null,
+                website: userData.profile.website || null
+              },
+              create: {
+                userId: user.id,
+                bio: userData.profile.bio || null,
+                location: userData.profile.location || null,
+                website: userData.profile.website || null
               }
             });
-            results.users++;
-            logger.info(`User ${userData.username} restored with original password`);
           }
+
+          results.users++;
+          logger.info(`User ${userData.username} restored with password from backup`);
         } catch (error) {
           logger.error(`Failed to restore user ${userData.username}:`, error);
         }
