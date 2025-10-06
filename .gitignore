@@ -44,3 +44,6 @@ yarn.lock
 landing/*
 .env
 .pnpm-store/
+.seeded
+*.md
+/docs/*
