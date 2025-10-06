@@ -363,7 +363,7 @@ export const syncConfigToNode = async (req: AuthRequest, res: Response): Promise
           }
         });
 
-        return res.json({
+        res.json({
           success: true,
           message: 'Configuration already up to date',
           data: { 
@@ -371,6 +371,7 @@ export const syncConfigToNode = async (req: AuthRequest, res: Response): Promise
             configHash
           }
         });
+        return;
       }
 
       // Store config version
