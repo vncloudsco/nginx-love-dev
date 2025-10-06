@@ -117,23 +117,23 @@ pnpm install >> "${LOG_FILE}" 2>&1 || error "Failed to update monorepo dependenc
 cd "${BACKEND_DIR}"
 
 # Start database if not running
-if ! docker ps | grep -q "${DB_CONTAINER_NAME}"; then
+if ! docker ps | grep -q "${DB_CONTAINER_NAME}" 2>/dev/null; then
     log "Starting database container..."
-    docker start "${DB_CONTAINER_NAME}" > /dev/null 2>&1
+    docker start "${DB_CONTAINER_NAME}" 2>/dev/null || warn "Could not start database container"
     sleep 3
 fi
 
 # Generate Prisma client
 log "Generating Prisma client..."
-npx prisma generate > /dev/null 2>&1 || pnpm exec prisma generate > /dev/null 2>&1
+pnpm exec prisma generate >> "$LOG_FILE" 2>&1 || error "Failed to generate Prisma client"
 
 # Run database migrations
 log "Running database migrations..."
-npx prisma migrate deploy > /dev/null 2>&1 || pnpm exec prisma migrate deploy > /dev/null 2>&1
+pnpm exec prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
 
 # Seed database
 log "Seeding database..."
-npx ts-node prisma/seed.ts > /dev/null 2>&1 || pnpm exec ts-node prisma/seed.ts > /dev/null 2>&1 || warn "Seeding skipped"
+pnpm exec ts-node prisma/seed.ts >> "$LOG_FILE" 2>&1 || warn "Failed to seed database (this is normal if data already exists)"
 
 # Build backend
 log "Building backend..."
