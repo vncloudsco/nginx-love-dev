@@ -10,9 +10,11 @@ import logger from './utils/logger';
 import { initializeNginxForSSL } from './utils/nginx-setup';
 import { initializeModSecurityConfig } from './utils/modsec-setup';
 import { startAlertMonitoring, stopAlertMonitoring } from './utils/alert-monitoring.service';
+import { startSlaveNodeStatusCheck, stopSlaveNodeStatusCheck } from './utils/slave-status-checker';
 
 const app: Application = express();
 let monitoringTimer: NodeJS.Timeout | null = null;
+let slaveStatusTimer: NodeJS.Timeout | null = null;
 
 // Security middleware
 app.use(helmet());
@@ -65,6 +67,9 @@ const server = app.listen(PORT, () => {
   // Start alert monitoring service (global scan every 10 seconds)
   // Each rule has its own checkInterval for when to actually check
   monitoringTimer = startAlertMonitoring(10);
+  
+  // Start slave node status checker (check every minute)
+  slaveStatusTimer = startSlaveNodeStatusCheck();
 });
 
 // Graceful shutdown
@@ -72,6 +77,9 @@ process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received: closing HTTP server');
   if (monitoringTimer) {
     stopAlertMonitoring(monitoringTimer);
+  }
+  if (slaveStatusTimer) {
+    stopSlaveNodeStatusCheck(slaveStatusTimer);
   }
   server.close(() => {
     logger.info('HTTP server closed');
@@ -83,6 +91,9 @@ process.on('SIGINT', () => {
   logger.info('SIGINT signal received: closing HTTP server');
   if (monitoringTimer) {
     stopAlertMonitoring(monitoringTimer);
+  }
+  if (slaveStatusTimer) {
+    stopSlaveNodeStatusCheck(slaveStatusTimer);
   }
   server.close(() => {
     logger.info('HTTP server closed');
