@@ -46,3 +46,4 @@ landing/*
 .pnpm-store/
 .seeded
 *.md
+/docs/*
