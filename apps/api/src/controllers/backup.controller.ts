@@ -531,6 +531,27 @@ export const importConfig = async (req: AuthRequest, res: Response): Promise<voi
             );
             results.vhostConfigs++;
             logger.info(`Nginx vhost config restored for: ${domainData.name}`);
+          } else {
+            // If vhostConfig not in backup, generate it from domain data
+            logger.info(`Generating nginx vhost config for: ${domainData.name} (not in backup)`);
+            try {
+              // Re-fetch full domain with all relations for config generation
+              const fullDomain = await prisma.domain.findUnique({
+                where: { id: domain.id },
+                include: {
+                  upstreams: true,
+                  loadBalancer: true,
+                  sslCertificate: true
+                }
+              });
+              
+              if (fullDomain) {
+                await generateNginxConfigForBackup(fullDomain);
+                results.vhostConfigs++;
+              }
+            } catch (error) {
+              logger.error(`Failed to generate nginx config for ${domainData.name}:`, error);
+            }
           }
 
         } catch (error) {
@@ -956,17 +977,224 @@ export const deleteBackupFile = async (req: AuthRequest, res: Response): Promise
 };
 
 /**
+ * Helper function to generate nginx vhost configuration for a domain during backup restore
+ * This is simplified version of generateNginxConfig from domain.controller
+ */
+async function generateNginxConfigForBackup(domain: any): Promise<void> {
+  const configPath = path.join(NGINX_SITES_AVAILABLE, `${domain.name}.conf`);
+  const enabledPath = path.join(NGINX_SITES_ENABLED, `${domain.name}.conf`);
+
+  // Determine if any upstream uses HTTPS
+  const hasHttpsUpstream = domain.upstreams?.some(
+    (u: any) => u.protocol === "https"
+  ) || false;
+  const upstreamProtocol = hasHttpsUpstream ? "https" : "http";
+
+  // Generate upstream block
+  const upstreamBlock = `
+upstream ${domain.name.replace(/\./g, "_")}_backend {
+    ${domain.loadBalancer?.algorithm === "least_conn" ? "least_conn;" : ""}
+    ${domain.loadBalancer?.algorithm === "ip_hash" ? "ip_hash;" : ""}
+    
+    ${(domain.upstreams || [])
+      .map(
+        (u: any) =>
+          `server ${u.host}:${u.port} weight=${u.weight || 1} max_fails=${u.maxFails || 3} fail_timeout=${u.failTimeout || 10}s;`
+      )
+      .join("\n    ")}
+}
+`;
+
+  // HTTP server block (always present)
+  let httpServerBlock = `
+server {
+    listen 80;
+    server_name ${domain.name};
+    
+    # Include ACL rules (IP whitelist/blacklist)
+    include /etc/nginx/conf.d/acl-rules.conf;
+    
+    # Include ACME challenge location for Let's Encrypt
+    include /etc/nginx/snippets/acme-challenge.conf;
+    
+    ${
+      domain.sslEnabled
+        ? `
+    # Redirect HTTP to HTTPS
+    return 301 https://$server_name$request_uri;
+    `
+        : `
+    ${domain.modsecEnabled ? "modsecurity on;" : "modsecurity off;"}
+    
+    access_log /var/log/nginx/${domain.name}_access.log main;
+    error_log /var/log/nginx/${domain.name}_error.log warn;
+    
+    location / {
+        proxy_pass ${upstreamProtocol}://${domain.name.replace(/\./g, "_")}_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        ${
+          hasHttpsUpstream
+            ? `
+        # HTTPS Backend Settings
+        ${
+          domain.upstreams?.some((u: any) => u.protocol === "https" && !u.sslVerify)
+            ? "proxy_ssl_verify off;"
+            : "proxy_ssl_verify on;"
+        }
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${domain.name};
+        proxy_ssl_protocols TLSv1.2 TLSv1.3;
+        `
+            : ""
+        }
+        
+        ${
+          domain.loadBalancer?.healthCheckEnabled
+            ? `
+        # Health check settings
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+        proxy_next_upstream_timeout ${domain.loadBalancer.healthCheckTimeout || 5}s;
+        `
+            : ""
+        }
+    }
+    
+    location /nginx_health {
+        access_log off;
+        return 200 "healthy\\n";
+        add_header Content-Type text/plain;
+    }
+    `
+    }
+}
+`;
+
+  // HTTPS server block (only if SSL enabled)
+  let httpsServerBlock = "";
+  if (domain.sslEnabled && domain.sslCertificate) {
+    httpsServerBlock = `
+server {
+    listen 443 ssl http2;
+    server_name ${domain.name};
+    
+    # Include ACL rules (IP whitelist/blacklist)
+    include /etc/nginx/conf.d/acl-rules.conf;
+    
+    # SSL Certificate Configuration
+    ssl_certificate /etc/nginx/ssl/${domain.name}.crt;
+    ssl_certificate_key /etc/nginx/ssl/${domain.name}.key;
+    ${
+      domain.sslCertificate.chain
+        ? `ssl_trusted_certificate /etc/nginx/ssl/${domain.name}.chain.crt;`
+        : ""
+    }
+    
+    # SSL Security Settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:!MD5:!PSK;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    ${domain.modsecEnabled ? "modsecurity on;" : "modsecurity off;"}
+    
+    access_log /var/log/nginx/${domain.name}_ssl_access.log main;
+    error_log /var/log/nginx/${domain.name}_ssl_error.log warn;
+    
+    location / {
+        proxy_pass ${upstreamProtocol}://${domain.name.replace(/\./g, "_")}_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        ${
+          hasHttpsUpstream
+            ? `
+        # HTTPS Backend Settings
+        ${
+          domain.upstreams?.some((u: any) => u.protocol === "https" && !u.sslVerify)
+            ? "proxy_ssl_verify off;"
+            : "proxy_ssl_verify on;"
+        }
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${domain.name};
+        proxy_ssl_protocols TLSv1.2 TLSv1.3;
+        `
+            : ""
+        }
+        
+        ${
+          domain.loadBalancer?.healthCheckEnabled
+            ? `
+        # Health check settings
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+        proxy_next_upstream_timeout ${domain.loadBalancer.healthCheckTimeout || 5}s;
+        `
+            : ""
+        }
+    }
+    
+    location /nginx_health {
+        access_log off;
+        return 200 "healthy\\n";
+        add_header Content-Type text/plain;
+    }
+}
+`;
+  }
+
+  const fullConfig = upstreamBlock + httpServerBlock + httpsServerBlock;
+
+  // Write configuration file
+  try {
+    await fs.mkdir(NGINX_SITES_AVAILABLE, { recursive: true });
+    await fs.mkdir(NGINX_SITES_ENABLED, { recursive: true });
+    await fs.writeFile(configPath, fullConfig);
+
+    // Create symlink if domain is active
+    if (domain.status === "active") {
+      try {
+        await fs.unlink(enabledPath);
+      } catch (e) {
+        // File doesn't exist, ignore
+      }
+      await fs.symlink(configPath, enabledPath);
+    }
+
+    logger.info(`Nginx configuration generated for ${domain.name} during backup restore`);
+  } catch (error) {
+    logger.error(`Failed to write nginx config for ${domain.name}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Helper function to read nginx vhost configuration file for a domain
  */
 async function readNginxVhostConfig(domainName: string) {
   try {
-    const vhostPath = path.join(NGINX_SITES_AVAILABLE, domainName);
+    const vhostPath = path.join(NGINX_SITES_AVAILABLE, `${domainName}.conf`);
     const vhostConfig = await fs.readFile(vhostPath, 'utf-8');
     
     // Check if symlink exists in sites-enabled
     let isEnabled = false;
     try {
-      const enabledPath = path.join(NGINX_SITES_ENABLED, domainName);
+      const enabledPath = path.join(NGINX_SITES_ENABLED, `${domainName}.conf`);
       await fs.access(enabledPath);
       isEnabled = true;
     } catch {
@@ -992,13 +1220,13 @@ async function writeNginxVhostConfig(domainName: string, config: string, enabled
     await fs.mkdir(NGINX_SITES_AVAILABLE, { recursive: true });
     await fs.mkdir(NGINX_SITES_ENABLED, { recursive: true });
 
-    const vhostPath = path.join(NGINX_SITES_AVAILABLE, domainName);
+    const vhostPath = path.join(NGINX_SITES_AVAILABLE, `${domainName}.conf`);
     await fs.writeFile(vhostPath, config, 'utf-8');
     logger.info(`Nginx vhost config written for ${domainName}`);
 
     // Create symlink in sites-enabled if enabled
     if (enabled) {
-      const enabledPath = path.join(NGINX_SITES_ENABLED, domainName);
+      const enabledPath = path.join(NGINX_SITES_ENABLED, `${domainName}.conf`);
       try {
         await fs.unlink(enabledPath);
       } catch {
