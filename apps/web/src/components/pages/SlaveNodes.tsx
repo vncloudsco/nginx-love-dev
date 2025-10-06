@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,84 +7,145 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Server, RefreshCw, Send, Trash2, CheckCircle2, XCircle, Clock } from "lucide-react";
-import { mockSlaveNodes } from "@/mocks/data";
+import { Server, RefreshCw, Trash2, CheckCircle2, XCircle, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { SlaveNode } from "@/types";
 import { useToast } from "@/hooks/use-toast";
-import { UnderConstructionBanner } from "@/components/ui/under-construction-banner";
+import { slaveNodesQueryOptions } from "@/queries/slave.query-options";
+import { slaveNodeService } from "@/services/slave.service";
 
 const SlaveNodes = () => {
-  const { t } = useTranslation();
   const { toast } = useToast();
-  const [nodes, setNodes] = useState<SlaveNode[]>(mockSlaveNodes);
+  const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
     host: "",
-    port: 8088
+    port: 3001,
+    syncInterval: 60
+  });
+
+  // Fetch slave nodes
+  const { data: nodes = [], isLoading } = useQuery(slaveNodesQueryOptions.all);
+
+  // Register mutation
+  const registerMutation = useMutation({
+    mutationFn: slaveNodeService.register,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['slave-nodes'] });
+      setIsDialogOpen(false);
+      resetForm();
+      
+      // Show API key in toast (only shown once)
+      toast({ 
+        title: "Slave node registered",
+        description: `API Key: ${data.data.apiKey} (save this, it won't be shown again)`,
+        duration: 10000
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Registration failed",
+        description: error.response?.data?.message || "Failed to register node",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: slaveNodeService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['slave-nodes'] });
+      toast({ title: "Node removed successfully" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete failed",
+        description: error.response?.data?.message || "Failed to delete node",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Sync mutation
+  const syncMutation = useMutation({
+    mutationFn: ({ id, force }: { id: string; force?: boolean }) => 
+      slaveNodeService.syncToNode(id, { force }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['slave-nodes'] });
+      const message = data.data?.skipped 
+        ? "Configuration already up to date" 
+        : `Synced ${data.data?.changesCount || 0} changes in ${data.data?.duration || 0}ms`;
+      toast({ title: "Sync completed", description: message });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync failed",
+        description: error.response?.data?.message || "Failed to sync configuration",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Sync all mutation
+  const syncAllMutation = useMutation({
+    mutationFn: slaveNodeService.syncToAll,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['slave-nodes'] });
+      toast({ 
+        title: "Sync to all nodes completed",
+        description: `${data.data.success}/${data.data.total} nodes synced successfully`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync all failed",
+        description: error.response?.data?.message || "Failed to sync to all nodes",
+        variant: "destructive"
+      });
+    }
   });
 
   const handleAddNode = () => {
-    const newNode: SlaveNode = {
-      id: `node${nodes.length + 1}`,
+    if (!formData.name || !formData.host) {
+      toast({
+        title: "Validation error",
+        description: "Name and host are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    registerMutation.mutate({
       name: formData.name,
       host: formData.host,
       port: formData.port,
-      status: 'offline',
-      lastSeen: new Date().toISOString(),
-      version: '1.24.0',
-      syncStatus: {
-        lastSync: new Date().toISOString(),
-        configHash: '',
-        inSync: false
-      }
-    };
-    setNodes([...nodes, newNode]);
-    setIsDialogOpen(false);
-    resetForm();
-    toast({ title: "Slave node registered", description: "Node added successfully" });
+      syncInterval: formData.syncInterval
+    });
   };
 
   const resetForm = () => {
     setFormData({
       name: "",
       host: "",
-      port: 8088
-    });
-  };
-
-  const handlePushConfig = (nodeId: string) => {
-    const node = nodes.find(n => n.id === nodeId);
-    toast({ 
-      title: "Configuration pushed",
-      description: `Config sync initiated to ${node?.name} (mock mode)`
+      port: 3001,
+      syncInterval: 60
     });
   };
 
   const handleSync = (nodeId: string) => {
-    setNodes(nodes.map(n => 
-      n.id === nodeId 
-        ? { 
-            ...n, 
-            status: 'syncing',
-            syncStatus: { ...n.syncStatus, lastSync: new Date().toISOString() }
-          }
-        : n
-    ));
-    setTimeout(() => {
-      setNodes(nodes.map(n => 
-        n.id === nodeId 
-          ? { ...n, status: 'online', syncStatus: { ...n.syncStatus, inSync: true } }
-          : n
-      ));
-      toast({ title: "Sync completed" });
-    }, 2000);
+    syncMutation.mutate({ id: nodeId, force: false });
+  };
+
+  const handleSyncAll = () => {
+    syncAllMutation.mutate();
   };
 
   const handleDelete = (id: string) => {
-    setNodes(nodes.filter(n => n.id !== id));
-    toast({ title: "Node removed" });
+    if (confirm("Are you sure you want to remove this node?")) {
+      deleteMutation.mutate(id);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -92,6 +153,7 @@ const SlaveNodes = () => {
       case 'online': return 'default';
       case 'offline': return 'destructive';
       case 'syncing': return 'secondary';
+      case 'error': return 'destructive';
       default: return 'secondary';
     }
   };
@@ -101,13 +163,30 @@ const SlaveNodes = () => {
       case 'online': return <CheckCircle2 className="h-4 w-4" />;
       case 'offline': return <XCircle className="h-4 w-4" />;
       case 'syncing': return <RefreshCw className="h-4 w-4 animate-spin" />;
+      case 'error': return <AlertCircle className="h-4 w-4" />;
       default: return <Clock className="h-4 w-4" />;
     }
   };
 
+  const isNodeInSync = (node: SlaveNode) => {
+    // Legacy support for old mock data
+    if (node.syncStatus?.inSync !== undefined) {
+      return node.syncStatus.inSync;
+    }
+    // New logic: check if configHash exists and lastSyncAt is recent
+    return !!node.configHash && node.lastSyncAt;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <UnderConstructionBanner />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-lg">
@@ -118,56 +197,84 @@ const SlaveNodes = () => {
             <p className="text-muted-foreground">Manage distributed nginx nodes and configuration sync</p>
           </div>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm">
-              <Server className="h-4 w-4 mr-2" />
-              Register Node
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Register Slave Node</DialogTitle>
-              <DialogDescription>
-                Add a new slave node to the cluster
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Node Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="nginx-slave-04"
-                />
+        <div className="flex gap-2">
+          <Button 
+            size="sm" 
+            variant="outline"
+            onClick={handleSyncAll}
+            disabled={syncAllMutation.isPending || nodes.length === 0}
+          >
+            {syncAllMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Sync All
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Server className="h-4 w-4 mr-2" />
+                Register Node
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Register Slave Node</DialogTitle>
+                <DialogDescription>
+                  Add a new slave node to the cluster
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Node Name</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="nginx-slave-01"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="host">Host/IP Address</Label>
+                  <Input
+                    id="host"
+                    value={formData.host}
+                    onChange={(e) => setFormData({ ...formData, host: e.target.value })}
+                    placeholder="10.0.10.11"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="port">Port</Label>
+                  <Input
+                    id="port"
+                    type="number"
+                    value={formData.port}
+                    onChange={(e) => setFormData({ ...formData, port: Number(e.target.value) })}
+                    placeholder="3001"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="syncInterval">Sync Interval (seconds)</Label>
+                  <Input
+                    id="syncInterval"
+                    type="number"
+                    value={formData.syncInterval}
+                    onChange={(e) => setFormData({ ...formData, syncInterval: Number(e.target.value) })}
+                    placeholder="60"
+                  />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="host">Host/IP Address</Label>
-                <Input
-                  id="host"
-                  value={formData.host}
-                  onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                  placeholder="10.0.10.14"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="port">Port</Label>
-                <Input
-                  id="port"
-                  type="number"
-                  value={formData.port}
-                  onChange={(e) => setFormData({ ...formData, port: Number(e.target.value) })}
-                  placeholder="8088"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddNode}>Register Node</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleAddNode} disabled={registerMutation.isPending}>
+                  {registerMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Register Node
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -206,7 +313,7 @@ const SlaveNodes = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {nodes.filter(n => n.syncStatus.inSync).length}/{nodes.length}
+              {nodes.filter(n => isNodeInSync(n)).length}/{nodes.length}
             </div>
             <p className="text-xs text-muted-foreground">
               Nodes in sync
@@ -232,66 +339,80 @@ const SlaveNodes = () => {
                   <TableHead>Last Seen</TableHead>
                   <TableHead>Sync Status</TableHead>
                   <TableHead>Config Hash</TableHead>
+                  <TableHead>Enabled</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {nodes.map((node) => (
-                  <TableRow key={node.id}>
-                    <TableCell className="font-medium">{node.name}</TableCell>
-                    <TableCell className="font-mono text-sm">{node.host}:{node.port}</TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusColor(node.status)}>
-                        {getStatusIcon(node.status)}
-                        <span className="ml-1">{node.status}</span>
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{node.version}</TableCell>
-                    <TableCell className="text-sm">
-                      {new Date(node.lastSeen).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      {node.syncStatus.inSync ? (
-                        <Badge variant="default">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          In Sync
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive">
-                          <XCircle className="h-3 w-3 mr-1" />
-                          Out of Sync
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {node.syncStatus.configHash || 'N/A'}
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleSync(node.id)}
-                        disabled={node.status === 'syncing'}
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handlePushConfig(node.id)}
-                      >
-                        <Send className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleDelete(node.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                {nodes.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      No slave nodes registered. Click "Register Node" to add one.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  nodes.map((node) => (
+                    <TableRow key={node.id}>
+                      <TableCell className="font-medium">{node.name}</TableCell>
+                      <TableCell className="font-mono text-sm">{node.host}:{node.port}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusColor(node.status)}>
+                          {getStatusIcon(node.status)}
+                          <span className="ml-1">{node.status}</span>
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{node.version || 'N/A'}</TableCell>
+                      <TableCell className="text-sm">
+                        {node.lastSeen ? new Date(node.lastSeen).toLocaleString() : 'Never'}
+                      </TableCell>
+                      <TableCell>
+                        {isNodeInSync(node) ? (
+                          <Badge variant="default">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            In Sync
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive">
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Out of Sync
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {node.configHash?.substring(0, 12) || 'N/A'}...
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={node.syncEnabled ? 'default' : 'secondary'}>
+                          {node.syncEnabled ? 'Yes' : 'No'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleSync(node.id)}
+                          disabled={syncMutation.isPending || node.status === 'syncing' || !node.syncEnabled}
+                          title="Sync configuration"
+                        >
+                          {syncMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleDelete(node.id)}
+                          disabled={deleteMutation.isPending}
+                          title="Remove node"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -312,24 +433,29 @@ const SlaveNodes = () => {
               <p className="text-sm font-medium">Master Node</p>
               <p className="text-xs text-muted-foreground">Primary</p>
             </div>
-            <div className="flex-1 h-0.5 bg-border"></div>
-            <div className="grid grid-cols-3 gap-4">
-              {nodes.map((node) => (
-                <div key={node.id} className="flex flex-col items-center">
-                  <div className={`w-16 h-16 rounded-lg ${
-                    node.status === 'online' ? 'bg-green-100 dark:bg-green-900' : 
-                    node.status === 'syncing' ? 'bg-yellow-100 dark:bg-yellow-900' :
-                    'bg-red-100 dark:bg-red-900'
-                  } flex items-center justify-center mb-2`}>
-                    <Server className="h-8 w-8" />
-                  </div>
-                  <p className="text-xs font-medium">{node.name}</p>
-                  <Badge variant={getStatusColor(node.status)} className="text-xs mt-1">
-                    {node.status}
-                  </Badge>
+            {nodes.length > 0 && (
+              <>
+                <div className="flex-1 h-0.5 bg-border"></div>
+                <div className="grid grid-cols-3 gap-4">
+                  {nodes.map((node) => (
+                    <div key={node.id} className="flex flex-col items-center">
+                      <div className={`w-16 h-16 rounded-lg ${
+                        node.status === 'online' ? 'bg-green-100 dark:bg-green-900' : 
+                        node.status === 'syncing' ? 'bg-yellow-100 dark:bg-yellow-900' :
+                        node.status === 'error' ? 'bg-red-100 dark:bg-red-900' :
+                        'bg-gray-100 dark:bg-gray-800'
+                      } flex items-center justify-center mb-2`}>
+                        <Server className="h-8 w-8" />
+                      </div>
+                      <p className="text-xs font-medium">{node.name}</p>
+                      <Badge variant={getStatusColor(node.status)} className="text-xs mt-1">
+                        {node.status}
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>

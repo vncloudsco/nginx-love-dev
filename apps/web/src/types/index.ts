@@ -186,10 +186,27 @@ export interface SlaveNode {
   name: string;
   host: string;
   port: number;
-  status: 'online' | 'offline' | 'syncing';
-  lastSeen: string;
-  version: string;
-  syncStatus: {
+  status: 'online' | 'offline' | 'syncing' | 'error';
+  lastSeen?: string;
+  version?: string;
+  
+  // Sync configuration
+  syncEnabled: boolean;
+  syncInterval: number;
+  configHash?: string;
+  lastSyncAt?: string;
+  
+  // Metrics
+  latency?: number;
+  cpuUsage?: number;
+  memoryUsage?: number;
+  diskUsage?: number;
+  
+  createdAt: string;
+  updatedAt: string;
+  
+  // Legacy support for old mock data
+  syncStatus?: {
     lastSync: string;
     configHash: string;
     inSync: boolean;

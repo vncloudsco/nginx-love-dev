@@ -506,3 +506,91 @@ model BackupFile {
   @@index([createdAt])
   @@map("backup_files")
 }
+
+enum SlaveNodeStatus {
+  online
+  offline
+  syncing
+  error
+}
+
+enum SyncLogStatus {
+  success
+  failed
+  partial
+  running
+}
+
+enum SyncLogType {
+  full_sync
+  incremental_sync
+  health_check
+}
+
+model SlaveNode {
+  id            String          @id @default(cuid())
+  name          String          @unique
+  host          String
+  port          Int             @default(3001)
+  apiKey        String          @unique // Authentication token for slave
+  
+  status        SlaveNodeStatus @default(offline)
+  lastSeen      DateTime?
+  version       String?
+  
+  // Sync configuration
+  syncEnabled   Boolean         @default(true)
+  syncInterval  Int             @default(60) // seconds
+  configHash    String?         // SHA256 hash of current config
+  lastSyncAt    DateTime?
+  
+  // Metrics
+  latency       Int?            // milliseconds
+  cpuUsage      Float?
+  memoryUsage   Float?
+  diskUsage     Float?
+  
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  syncLogs      SyncLog[]
+  
+  @@index([status])
+  @@index([lastSeen])
+  @@map("slave_nodes")
+}
+
+model SyncLog {
+  id            String        @id @default(cuid())
+  nodeId        String
+  node          SlaveNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  
+  type          SyncLogType
+  status        SyncLogStatus @default(running)
+  
+  configHash    String?
+  changesCount  Int?
+  errorMessage  String?       @db.Text
+  
+  startedAt     DateTime      @default(now())
+  completedAt   DateTime?
+  duration      Int?          // milliseconds
+  
+  @@index([nodeId, startedAt])
+  @@map("sync_logs")
+}
+
+model ConfigVersion {
+  id          String   @id @default(cuid())
+  version     Int      @default(autoincrement())
+  configHash  String   @unique
+  configData  Json     // Serialized config
+  
+  createdBy   String?
+  description String?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([createdAt])
+  @@map("config_versions")
+}
