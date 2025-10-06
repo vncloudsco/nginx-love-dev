@@ -196,7 +196,7 @@ async function collectSyncData() {
     })),
 
     // SSL Certificates (NO timestamps, NO IDs)
-    ssl: ssl.map(s => ({
+    sslCertificates: ssl.map(s => ({
       domainName: s.domain?.name,
       commonName: s.commonName,
       sans: s.sans,
@@ -210,7 +210,7 @@ async function collectSyncData() {
     })),
 
     // ModSecurity CRS Rules (NO timestamps, NO IDs)
-    modsecCRS: modsecCRS.map(r => ({
+    modsecCRSRules: modsecCRS.map(r => ({
       ruleFile: r.ruleFile,
       name: r.name,
       category: r.category,
@@ -220,7 +220,7 @@ async function collectSyncData() {
     })),
 
     // ModSecurity Custom Rules (NO timestamps, NO IDs)
-    modsecCustom: modsecCustom.map(r => ({
+    modsecCustomRules: modsecCustom.map(r => ({
       name: r.name,
       category: r.category,
       ruleContent: r.ruleContent,
@@ -229,7 +229,7 @@ async function collectSyncData() {
     })),
 
     // ACL (NO timestamps, NO IDs)
-    acl: acl.map(a => ({
+    aclRules: acl.map(a => ({
       name: a.name,
       type: a.type,
       conditionField: a.conditionField,
@@ -337,8 +337,8 @@ async function importSyncConfig(config: any) {
     }
 
     // 2. Import SSL Certificates
-    if (config.ssl && Array.isArray(config.ssl)) {
-      for (const sslData of config.ssl) {
+    if (config.sslCertificates && Array.isArray(config.sslCertificates)) {
+      for (const sslData of config.sslCertificates) {
         try {
           const domain = await prisma.domain.findUnique({
             where: { name: sslData.domainName }
@@ -380,10 +380,10 @@ async function importSyncConfig(config: any) {
     }
 
     // 3. Import ModSecurity CRS Rules
-    if (config.modsecCRS && Array.isArray(config.modsecCRS)) {
+    if (config.modsecCRSRules && Array.isArray(config.modsecCRSRules)) {
       await prisma.modSecCRSRule.deleteMany({});
       
-      for (const rule of config.modsecCRS) {
+      for (const rule of config.modsecCRSRules) {
         await prisma.modSecCRSRule.create({
           data: {
             ruleFile: rule.ruleFile,
@@ -399,10 +399,10 @@ async function importSyncConfig(config: any) {
     }
 
     // 4. Import ModSecurity Custom Rules
-    if (config.modsecCustom && Array.isArray(config.modsecCustom)) {
+    if (config.modsecCustomRules && Array.isArray(config.modsecCustomRules)) {
       await prisma.modSecRule.deleteMany({});
       
-      for (const rule of config.modsecCustom) {
+      for (const rule of config.modsecCustomRules) {
         await prisma.modSecRule.create({
           data: {
             name: rule.name,
@@ -417,10 +417,10 @@ async function importSyncConfig(config: any) {
     }
 
     // 5. Import ACL Rules
-    if (config.acl && Array.isArray(config.acl)) {
+    if (config.aclRules && Array.isArray(config.aclRules)) {
       await prisma.aclRule.deleteMany({});
       
-      for (const rule of config.acl) {
+      for (const rule of config.aclRules) {
         await prisma.aclRule.create({
           data: {
             name: rule.name,

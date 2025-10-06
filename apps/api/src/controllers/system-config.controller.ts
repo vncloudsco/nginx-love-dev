@@ -3,7 +3,6 @@ import { AuthRequest } from '../middleware/auth';
 import prisma from '../config/database';
 import logger from '../utils/logger';
 import axios from 'axios';
-import { validateMasterUrl, constructSafeUrl, validateHealthResponse, validateConfigExportResponse } from '../utils/url-validator';
 
 /**
  * Get system configuration (node mode,    });
@@ -138,32 +137,19 @@ export const connectToMaster = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Validate master URL format (prevent injection, allow LAN IPs)
-    const urlValidation = validateMasterUrl(masterHost, parseInt(masterPort.toString()));
-    if (!urlValidation.isValid) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid master configuration: ${urlValidation.error}`
-      });
-    }
-
     // Test connection to master
     try {
       logger.info('Testing connection to master...', { masterHost, masterPort });
 
-      const healthUrl = constructSafeUrl(masterHost, parseInt(masterPort.toString()), '/api/slave/health');
-      const response = await axios.get(healthUrl!, {
-        headers: {
-          'X-API-Key': masterApiKey
-        },
-        timeout: 10000
-      });
-
-      // SSRF Protection: Validate response data
-      const responseValidation = validateHealthResponse(response.data);
-      if (!responseValidation.isValid) {
-        throw new Error(`Invalid response from master: ${responseValidation.error}`);
-      }
+      const response = await axios.get(
+        `http://${masterHost}:${masterPort}/api/slave/health`,
+        {
+          headers: {
+            'X-API-Key': masterApiKey
+          },
+          timeout: 10000
+        }
+      );
 
       if (!response.data.success) {
         throw new Error('Master health check failed');
@@ -301,21 +287,16 @@ export const testMasterConnection = async (req: AuthRequest, res: Response) => {
 
     // Test connection
     const startTime = Date.now();
-    
-    const healthUrl = constructSafeUrl(config.masterHost!, config.masterPort!, '/api/slave/health');
-    const response = await axios.get(healthUrl!, {
-      headers: {
-        'X-API-Key': config.masterApiKey
-      },
-      timeout: 10000
-    });
+    const response = await axios.get(
+      `http://${config.masterHost}:${config.masterPort}/api/slave/health`,
+      {
+        headers: {
+          'X-API-Key': config.masterApiKey
+        },
+        timeout: 10000
+      }
+    );
     const latency = Date.now() - startTime;
-
-    // SSRF Protection: Validate response data
-    const responseValidation = validateHealthResponse(response.data);
-    if (!responseValidation.isValid) {
-      throw new Error(`Invalid response from master: ${responseValidation.error}`);
-    }
 
     // Update config
     await prisma.systemConfig.update({
@@ -365,6 +346,8 @@ export const testMasterConnection = async (req: AuthRequest, res: Response) => {
  */
 export const syncWithMaster = async (req: AuthRequest, res: Response) => {
   try {
+    logger.info('========== SYNC WITH MASTER CALLED ==========');
+    
     const config = await prisma.systemConfig.findFirst();
 
     if (!config) {
@@ -394,13 +377,9 @@ export const syncWithMaster = async (req: AuthRequest, res: Response) => {
     });
 
     // Download config from master using new node-sync API
-    const masterUrl = constructSafeUrl(
-      config.masterHost!,
-      config.masterPort || 3001,
-      '/api/node-sync/export'
-    );
+    const masterUrl = `http://${config.masterHost}:${config.masterPort || 3001}/api/node-sync/export`;
     
-    const response = await axios.get(masterUrl!, {
+    const response = await axios.get(masterUrl, {
       headers: {
         'X-Slave-API-Key': config.masterApiKey
       },
@@ -411,10 +390,9 @@ export const syncWithMaster = async (req: AuthRequest, res: Response) => {
       throw new Error(response.data.message || 'Failed to export config from master');
     }
 
-    // SSRF Protection: Validate response data structure
-    const exportValidation = validateConfigExportResponse(response.data.data);
-    if (!exportValidation.isValid) {
-      throw new Error(`Invalid config export response: ${exportValidation.error}`);
+    // Basic validation: check if response has required structure
+    if (!response.data.data || !response.data.data.hash || !response.data.data.config) {
+      throw new Error('Invalid response structure from master');
     }
 
     const { hash: masterHash, config: masterConfig } = response.data.data;
