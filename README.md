@@ -44,6 +44,16 @@ cd nginx-love
 bash scripts/deploy.sh
 ```
 
+### 🖥️ Production Upgrade Deployment (Upgrade New Version)
+
+```bash
+# Run Upgrade script (requires root)
+cd nginx-love
+bash scripts/update.sh
+```
+
+
+
 **Minimum Requirements:**
 - Ubuntu/Debian server (22.04+ recommended)
 - Root access
