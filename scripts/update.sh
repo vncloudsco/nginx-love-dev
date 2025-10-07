@@ -132,10 +132,10 @@ log "Running database migrations..."
 cd "${BACKEND_DIR}"
 pnpm prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
 
-# Seed database
-log "Seeding database..."
+# Seed database safely (only create missing data, preserve existing)
+log "Seeding database safely..."
 cd "${BACKEND_DIR}"
-pnpm  ts-node prisma/seed.ts >> "$LOG_FILE" 2>&1 || warn "Failed to seed database (this is normal if data already exists)"
+pnpm ts-node prisma/seed-safe.ts >> "$LOG_FILE" 2>&1 || warn "Failed to seed database safely"
 
 # Build backend
 log "Building backend..."
@@ -250,7 +250,7 @@ log ""
 log "📋 Updated Components:"
 log "  • Backend API: Rebuilt and restarted"
 log "  • Frontend UI: Rebuilt and restarted"
-log "  • Database: Migrations applied, new tables seeded"
+log "  • Database: Migrations applied, missing data created (existing data preserved)"
 log ""
 log "🌐 Services Status:"
 log "  • Backend API: http://${PUBLIC_IP}:3001"

@@ -29,12 +29,11 @@ import {
   Loader2
 } from "lucide-react";
 import { UserProfile, ActivityLog } from "@/types";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { accountService } from "@/services/auth.service";
 
 const Account = () => {
   const { t } = useTranslation();
-  const { toast } = useToast();
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -89,10 +88,8 @@ const Account = () => {
       setProfile(data);
       setTwoFactorEnabled(data.twoFactorEnabled);
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to load profile",
-        variant: "destructive"
+      toast.error("Error", {
+        description: error.response?.data?.message || "Failed to load profile"
       });
     }
   };
@@ -110,43 +107,35 @@ const Account = () => {
     try {
       const updatedProfile = await accountService.updateProfile(profileForm);
       setProfile(updatedProfile);
-      toast({
-        title: "Profile updated",
+      toast.success("Profile updated", {
         description: "Your profile information has been updated successfully"
       });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to update profile",
-        variant: "destructive"
+      toast.error("Error", {
+        description: error.response?.data?.message || "Failed to update profile"
       });
     }
   };
 
   const handlePasswordChange = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast({
-        title: "Password mismatch",
-        description: "New password and confirm password do not match",
-        variant: "destructive"
+      toast.error("Password mismatch", {
+        description: "New password and confirm password do not match"
       });
       return;
     }
 
     if (passwordForm.newPassword.length < 8) {
-      toast({
-        title: "Weak password",
-        description: "Password must be at least 8 characters long",
-        variant: "destructive"
+      toast.error("Weak password", {
+        description: "Password must be at least 8 characters long"
       });
       return;
     }
 
     try {
       await accountService.changePassword(passwordForm);
-      toast({
-        title: "Password changed",
-        description: "Your password has been changed successfully"
+      toast.success("✅ Password Changed Successfully", {
+        description: "Your password has been updated. Please login again with your new password."
       });
       setPasswordForm({
         currentPassword: "",
@@ -154,10 +143,8 @@ const Account = () => {
         confirmPassword: ""
       });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to change password",
-        variant: "destructive"
+      toast.error("Error", {
+        description: error.response?.data?.message || "Failed to change password"
       });
     }
   };
@@ -172,15 +159,12 @@ const Account = () => {
         await accountService.disable2FA(password);
         setTwoFactorEnabled(false);
         setTwoFactorSetup(null);
-        toast({
-          title: "2FA disabled",
-          description: "Two-factor authentication has been disabled"
+        toast.warning("⚠️ 2FA Disabled", {
+          description: "Two-factor authentication has been disabled for your account."
         });
       } catch (error: any) {
-        toast({
-          title: "Error",
-          description: error.response?.data?.message || "Failed to disable 2FA",
-          variant: "destructive"
+        toast.error("Error", {
+          description: error.response?.data?.message || "Failed to disable 2FA"
         });
       }
     } else {
@@ -188,15 +172,12 @@ const Account = () => {
       try {
         const setup = await accountService.setup2FA();
         setTwoFactorSetup(setup);
-        toast({
-          title: "2FA Setup",
-          description: "Scan the QR code with your authenticator app"
+        toast.info("📱 2FA Setup Ready", {
+          description: "Scan the QR code with your authenticator app to complete setup."
         });
       } catch (error: any) {
-        toast({
-          title: "Error",
-          description: error.response?.data?.message || "Failed to setup 2FA",
-          variant: "destructive"
+        toast.error("Error", {
+          description: error.response?.data?.message || "Failed to setup 2FA"
         });
       }
     }
@@ -204,10 +185,8 @@ const Account = () => {
 
   const handleVerify2FA = async () => {
     if (!verificationToken || verificationToken.length !== 6) {
-      toast({
-        title: "Invalid token",
-        description: "Please enter a 6-digit code",
-        variant: "destructive"
+      toast.error("Invalid token", {
+        description: "Please enter a 6-digit code"
       });
       return;
     }
@@ -217,25 +196,21 @@ const Account = () => {
       setTwoFactorEnabled(true);
       setTwoFactorSetup(null);
       setVerificationToken("");
-      toast({
-        title: "2FA enabled",
-        description: "Two-factor authentication has been enabled successfully"
+      toast.success("🛡️ 2FA Enabled Successfully", {
+        description: "Two-factor authentication is now active. Your account is more secure!"
       });
       loadProfile();
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Invalid verification code",
-        variant: "destructive"
+      toast.error("Error", {
+        description: error.response?.data?.message || "Invalid verification code"
       });
     }
   };
 
   const copyBackupCode = (code: string) => {
     navigator.clipboard.writeText(code);
-    toast({
-      title: "Copied",
-      description: "Backup code copied to clipboard"
+    toast.success("📋 Code Copied", {
+      description: "Backup code has been copied to your clipboard."
     });
   };
 
