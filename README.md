@@ -31,6 +31,7 @@ This project began as a private service built for a company. Later, my client an
 |----------|--------|-------------|
 | **New Server (Production)** | `./scripts/deploy.sh` | Full installation of Nginx + ModSecurity + Backend + Frontend with systemd services |
 | **Development/Testing** | `./scripts/quickstart.sh` | Quick run in dev mode (no Nginx installation, no root required) |
+| **Upgrade New Version** | `./scripts/update.sh` | Full update to new version |
 
 ### 🖥️ Production Deployment (New Server)
 
@@ -42,6 +43,16 @@ cd nginx-love
 # Run deployment script (requires root)
 bash scripts/deploy.sh
 ```
+
+### 🖥️ Production Upgrade Deployment (Upgrade New Version)
+
+```bash
+# Run Upgrade script (requires root)
+cd nginx-love
+bash scripts/update.sh
+```
+
+
 
 **Minimum Requirements:**
 - Ubuntu/Debian server (22.04+ recommended)
