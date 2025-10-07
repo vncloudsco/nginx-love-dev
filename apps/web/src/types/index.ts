@@ -186,10 +186,27 @@ export interface SlaveNode {
   name: string;
   host: string;
   port: number;
-  status: 'online' | 'offline' | 'syncing';
-  lastSeen: string;
-  version: string;
-  syncStatus: {
+  status: 'online' | 'offline' | 'syncing' | 'error';
+  lastSeen?: string;
+  version?: string;
+  
+  // Sync configuration
+  syncEnabled: boolean;
+  syncInterval: number;
+  configHash?: string;
+  lastSyncAt?: string;
+  
+  // Metrics
+  latency?: number;
+  cpuUsage?: number;
+  memoryUsage?: number;
+  diskUsage?: number;
+  
+  createdAt: string;
+  updatedAt: string;
+  
+  // Legacy support for old mock data
+  syncStatus?: {
     lastSync: string;
     configHash: string;
     inSync: boolean;
@@ -260,4 +277,27 @@ export interface ApiResponse<T> {
   data: T;
   message?: string;
   pagination?: Pagination;
+}
+
+export interface SystemConfig {
+  id: string;
+  nodeMode: 'master' | 'slave';
+  
+  // Master mode settings
+  masterApiEnabled: boolean;
+  
+  // Slave mode settings
+  slaveApiEnabled: boolean;
+  masterHost?: string | null;
+  masterPort?: number | null;
+  masterApiKey?: string | null;
+  syncInterval: number; // Sync interval in seconds
+  
+  // Connection status (for slave mode)
+  connected: boolean;
+  lastConnectedAt?: string | null;
+  connectionError?: string | null;
+  
+  createdAt: string;
+  updatedAt: string;
 }

@@ -11,6 +11,10 @@ import aclRoutes from './acl.routes';
 import performanceRoutes from './performance.routes';
 import userRoutes from './user.routes';
 import dashboardRoutes from './dashboard.routes';
+import backupRoutes from './backup.routes';
+import slaveRoutes from './slave.routes';
+import systemConfigRoutes from './system-config.routes';
+import nodeSyncRoutes from './node-sync.routes';
 
 const router = Router();
 
@@ -36,5 +40,9 @@ router.use('/acl', aclRoutes);
 router.use('/performance', performanceRoutes);
 router.use('/users', userRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/backup', backupRoutes);
+router.use('/slave', slaveRoutes);
+router.use('/system-config', systemConfigRoutes);
+router.use('/node-sync', nodeSyncRoutes);
 
 export default router;
