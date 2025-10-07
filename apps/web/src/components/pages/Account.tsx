@@ -145,8 +145,14 @@ const Account = () => {
     try {
       await accountService.changePassword(passwordForm);
       toast({
-        title: "Password changed",
-        description: "Your password has been changed successfully"
+        title: (
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            Password Changed Successfully
+          </div>
+        ),
+        description: "Your password has been updated. Please login again with your new password.",
+        className: "border-green-200 dark:border-green-800"
       });
       setPasswordForm({
         currentPassword: "",
@@ -173,8 +179,14 @@ const Account = () => {
         setTwoFactorEnabled(false);
         setTwoFactorSetup(null);
         toast({
-          title: "2FA disabled",
-          description: "Two-factor authentication has been disabled"
+          title: (
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-orange-500" />
+              2FA Disabled
+            </div>
+          ),
+          description: "Two-factor authentication has been disabled for your account.",
+          className: "border-orange-200 dark:border-orange-800"
         });
       } catch (error: any) {
         toast({
@@ -189,8 +201,14 @@ const Account = () => {
         const setup = await accountService.setup2FA();
         setTwoFactorSetup(setup);
         toast({
-          title: "2FA Setup",
-          description: "Scan the QR code with your authenticator app"
+          title: (
+            <div className="flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-blue-500" />
+              2FA Setup Ready
+            </div>
+          ),
+          description: "Scan the QR code with your authenticator app to complete setup.",
+          className: "border-blue-200 dark:border-blue-800"
         });
       } catch (error: any) {
         toast({
@@ -218,8 +236,14 @@ const Account = () => {
       setTwoFactorSetup(null);
       setVerificationToken("");
       toast({
-        title: "2FA enabled",
-        description: "Two-factor authentication has been enabled successfully"
+        title: (
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-green-500" />
+            2FA Enabled Successfully
+          </div>
+        ),
+        description: "Two-factor authentication is now active. Your account is more secure!",
+        className: "border-green-200 dark:border-green-800"
       });
       loadProfile();
     } catch (error: any) {
@@ -234,8 +258,14 @@ const Account = () => {
   const copyBackupCode = (code: string) => {
     navigator.clipboard.writeText(code);
     toast({
-      title: "Copied",
-      description: "Backup code copied to clipboard"
+      title: (
+        <div className="flex items-center gap-2">
+          <Copy className="h-4 w-4 text-blue-500" />
+          Code Copied
+        </div>
+      ),
+      description: "Backup code has been copied to your clipboard.",
+      className: "border-blue-200 dark:border-blue-800"
     });
   };
 
