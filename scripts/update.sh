@@ -132,10 +132,10 @@ log "Running database migrations..."
 cd "${BACKEND_DIR}"
 pnpm prisma migrate deploy >> "$LOG_FILE" 2>&1 || error "Failed to run migrations"
 
-# Seed database
-log "Seeding database..."
+# Seed database safely (only create missing data, preserve existing)
+log "Seeding database safely..."
 cd "${BACKEND_DIR}"
-pnpm  ts-node prisma/seed.ts >> "$LOG_FILE" 2>&1 || warn "Failed to seed database (this is normal if data already exists)"
+pnpm ts-node prisma/seed-safe.ts >> "$LOG_FILE" 2>&1 || warn "Failed to seed database safely"
 
 # Build backend
 log "Building backend..."
@@ -170,8 +170,8 @@ sed -i "s|__WS_URL__|ws://${PUBLIC_IP}:* ws://localhost:*|g" "${FRONTEND_DIR}/di
 
 log "✓ Frontend build completed"
 
-# Step 5: Restart services
-log "Step 5/6: Starting services..."
+# Step 6: Restart services
+log "Step 6/7: Starting services..."
 
 # Database should already be running from Step 3, just verify
 if ! docker ps | grep -q "${DB_CONTAINER_NAME}"; then
@@ -202,8 +202,8 @@ if ! systemctl is-active --quiet nginx; then
 fi
 log "✓ Nginx is running"
 
-# Step 6: Health check and summary
-log "Step 6/6: Performing health checks..."
+# Step 7: Health check and summary
+log "Step 7/7: Performing health checks..."
 
 # Health check with retries
 log "Performing health checks..."
@@ -248,9 +248,9 @@ log "Update Completed Successfully!"
 log "=================================="
 log ""
 log "📋 Updated Components:"
+log "  • Database: Backup created, migrations applied, missing data created (existing data preserved)"
 log "  • Backend API: Rebuilt and restarted"
 log "  • Frontend UI: Rebuilt and restarted"
-log "  • Database: Migrations applied, new tables seeded"
 log ""
 log "🌐 Services Status:"
 log "  • Backend API: http://${PUBLIC_IP}:3001"
