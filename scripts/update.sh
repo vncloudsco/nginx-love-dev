@@ -170,8 +170,8 @@ sed -i "s|__WS_URL__|ws://${PUBLIC_IP}:* ws://localhost:*|g" "${FRONTEND_DIR}/di
 
 log "✓ Frontend build completed"
 
-# Step 6: Restart services
-log "Step 6/7: Starting services..."
+# Step 5: Restart services
+log "Step 5/6: Starting services..."
 
 # Database should already be running from Step 3, just verify
 if ! docker ps | grep -q "${DB_CONTAINER_NAME}"; then
@@ -202,8 +202,8 @@ if ! systemctl is-active --quiet nginx; then
 fi
 log "✓ Nginx is running"
 
-# Step 7: Health check and summary
-log "Step 7/7: Performing health checks..."
+# Step 6: Health check and summary
+log "Step 6/6: Performing health checks..."
 
 # Health check with retries
 log "Performing health checks..."
