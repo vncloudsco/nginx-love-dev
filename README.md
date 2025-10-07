@@ -7,7 +7,7 @@ Comprehensive Nginx management system with ModSecurity WAF, Domain Management, S
 
 
 # Project Goal
-I created this project originally as a service for a company then my client and I agreed to make it opensource for free to the community to meet the personal or organizational needs of providing users with an easy way to configure Loadblancer for server systems with SSL termination, Web Application Firewall, and it should be so easy that even a monkey could do it. This goal remains the same Although there may be advanced options, they are optional and the project should be as simple as possible to minimize the barrier to entry. The software will have all the features of an application for a digital business that is needed in the context of technological development to rapidly develop the system along with ensuring system security.
+This project began as a private service built for a company. Later, my client and I decided to make it open source and free for the community to meet the personal or organizational needs of providing users with an easy way to configure Loadbalancer for server systems with SSL termination, Web Application Firewall, and it should be so easy that even a monkey could do it. This goal remains the same Although there may be advanced options, they are optional and the project should be as simple as possible to minimize the barrier to entry. The software will have all the features of an application for a digital business that is needed in the context of technological development to rapidly develop the system along with ensuring system security.
 
 
 ## ✨ Key Features
