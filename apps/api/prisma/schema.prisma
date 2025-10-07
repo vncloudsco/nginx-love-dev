@@ -28,6 +28,7 @@ enum ActivityType {
   config_change
   user_action
   security
+  system
 }
 
 model User {
