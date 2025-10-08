@@ -222,7 +222,7 @@ export class AuthService {
   async changePasswordFirstLogin(
     dto: FirstLoginPasswordDto,
     metadata: RequestMetadata
-  ): Promise<{ require2FASetup: boolean; userId: string; user: UserData }> {
+  ): Promise<LoginResult> {
     const { userId, tempToken, newPassword } = dto;
 
     // Verify temp token
@@ -264,14 +264,13 @@ export class AuthService {
 
     logger.info(`User ${user.username} changed password on first login`);
 
-    // Check if 2FA is enabled
-    const require2FASetup = !user.twoFactor?.enabled;
-    const userData = this.mapUserData(user);
-
+    // Generate tokens and complete login (no need to login again)
+    const result = await this.completeLogin(user, metadata, false);
+    
+    // Add flag to indicate if 2FA setup is needed
     return {
-      require2FASetup,
-      userId: user.id,
-      user: userData,
+      ...result,
+      require2FASetup: !user.twoFactor?.enabled,
     };
   }
 

@@ -226,14 +226,15 @@ export class AuthController {
       // Call service
       const result = await this.authService.changePasswordFirstLogin(dto, metadata);
 
-      // Return success response
+      // Return success response with tokens
       res.json({
         success: true,
         message: 'Password changed successfully',
         data: {
-          require2FASetup: result.require2FASetup,
-          userId: result.userId,
           user: result.user,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          require2FASetup: result.require2FASetup,
         },
       });
     } catch (error) {

@@ -105,6 +105,17 @@ export default function Login() {
     await navigate({ to: search.redirect || '/dashboard' });
   };
 
+  const handle2FASkip = async () => {
+    toast.info('Redirecting to dashboard...');
+    
+    await router.invalidate();
+    
+    // Wait a moment for auth state to update
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await navigate({ to: search.redirect || '/dashboard' });
+  };
+
   // Show password change screen
   if (currentStep === 'passwordChange') {
     return <ForcePasswordChange userId={userId} tempToken={tempToken} onPasswordChanged={handlePasswordChanged} />;
@@ -112,7 +123,7 @@ export default function Login() {
 
   // Show 2FA setup screen
   if (currentStep === '2faSetup') {
-    return <Force2FASetup onComplete={handle2FASetupComplete} />;
+    return <Force2FASetup onComplete={handle2FASetupComplete} onSkip={handle2FASkip} />;
   }
 
   // Show login/2FA verify screen

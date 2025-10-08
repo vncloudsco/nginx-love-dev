@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { authService } from '@/services/auth.service';
+import { useAuthStorage } from '@/hooks/useAuthStorage';
 
 interface ForcePasswordChangeProps {
   userId: string;
@@ -15,6 +16,7 @@ interface ForcePasswordChangeProps {
 }
 
 export default function ForcePasswordChange({ userId, tempToken, onPasswordChanged }: ForcePasswordChangeProps) {
+  const { setAuth } = useAuthStorage();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -51,6 +53,9 @@ export default function ForcePasswordChange({ userId, tempToken, onPasswordChang
         tempToken,
         newPassword,
       });
+
+      // Save auth tokens
+      setAuth(result.user, result.accessToken, result.refreshToken);
 
       toast.success('Password changed successfully');
       

@@ -70,7 +70,7 @@ export const authService = {
   },
 
   // Change password on first login
-  changePasswordFirstLogin: async (data: FirstLoginPasswordChangeRequest): Promise<{ require2FASetup: boolean; userId: string; user: UserProfile }> => {
+  changePasswordFirstLogin: async (data: FirstLoginPasswordChangeRequest): Promise<LoginResponse & { require2FASetup: boolean }> => {
     const response = await api.post('/auth/first-login/change-password', data);
     return response.data.data;
   },

@@ -1,21 +1,33 @@
 import { useState, useEffect } from 'react';
-import { Shield, CheckCircle2 } from 'lucide-react';
+import { Shield, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { accountService } from '@/services/auth.service';
 
 interface Force2FASetupProps {
   onComplete: () => void;
+  onSkip?: () => void;
 }
 
-export default function Force2FASetup({ onComplete }: Force2FASetupProps) {
+export default function Force2FASetup({ onComplete, onSkip }: Force2FASetupProps) {
   const [twoFactorSetup, setTwoFactorSetup] = useState<{ secret: string; qrCode: string; backupCodes: string[] } | null>(null);
   const [verificationToken, setVerificationToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSkipDialog, setShowSkipDialog] = useState(false);
 
   useEffect(() => {
     // Setup 2FA on component mount
@@ -64,6 +76,20 @@ export default function Force2FASetup({ onComplete }: Force2FASetupProps) {
     }
   };
 
+  const handleSkip = () => {
+    setShowSkipDialog(true);
+  };
+
+  const handleConfirmSkip = () => {
+    setShowSkipDialog(false);
+    toast.warning('⚠️ 2FA Not Enabled', {
+      description: 'Your account is not protected by two-factor authentication',
+    });
+    if (onSkip) {
+      onSkip();
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
@@ -96,8 +122,49 @@ export default function Force2FASetup({ onComplete }: Force2FASetupProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
-      <Card className="w-full max-w-md shadow-lg">
+    <>
+      {/* Security Warning Dialog */}
+      <AlertDialog open={showSkipDialog} onOpenChange={setShowSkipDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Security Warning
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p className="font-semibold text-foreground">
+                You are about to skip Two-Factor Authentication setup.
+              </p>
+              <div className="bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-lg p-3 space-y-2">
+                <p className="text-sm text-amber-900 dark:text-amber-200 font-medium">
+                  ⚠️ Security Risks:
+                </p>
+                <ul className="text-sm text-amber-800 dark:text-amber-300 space-y-1 ml-4 list-disc">
+                  <li>Your account will be vulnerable to unauthorized access</li>
+                  <li>Single password authentication is not secure enough</li>
+                  <li>Risk of account compromise increases significantly</li>
+                  <li>System administrators may restrict your access</li>
+                </ul>
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                Are you sure you want to continue without 2FA?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go Back & Setup 2FA</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmSkip}
+              className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600"
+            >
+              I Understand the Risks, Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+        <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
             <div className="p-3 bg-primary/10 rounded-full">
@@ -106,14 +173,14 @@ export default function Force2FASetup({ onComplete }: Force2FASetupProps) {
           </div>
           <CardTitle className="text-2xl font-bold">Enable Two-Factor Authentication</CardTitle>
           <CardDescription>
-            For security, you must enable 2FA before using this system
+            Secure your account with an additional layer of protection
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
             <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <AlertDescription className="text-blue-800 dark:text-blue-200">
-              This is a mandatory security requirement. You cannot proceed without enabling 2FA.
+              Two-factor authentication significantly improves your account security by requiring both your password and a verification code.
             </AlertDescription>
           </Alert>
 
@@ -191,8 +258,22 @@ export default function Force2FASetup({ onComplete }: Force2FASetupProps) {
               Once verified, you'll be able to access the system with your new password and 2FA enabled.
             </AlertDescription>
           </Alert>
+
+          {onSkip && (
+            <div className="pt-4 border-t">
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full text-muted-foreground hover:text-foreground"
+                onClick={handleSkip}
+              >
+                Skip for now (Not recommended)
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }
