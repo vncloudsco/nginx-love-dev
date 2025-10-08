@@ -6,8 +6,9 @@ Comprehensive Nginx management system with ModSecurity WAF, Domain Management, S
 
 
 
+# Project Goal
+This project began as a private service built for a company. Later, my client and I decided to make it open source and free for the community to meet the personal or organizational needs of providing users with an easy way to configure Loadbalancer for server systems with SSL termination, Web Application Firewall, and it should be so easy that even a monkey could do it. This goal remains the same Although there may be advanced options, they are optional and the project should be as simple as possible to minimize the barrier to entry. The software will have all the features of an application for a digital business that is needed in the context of technological development to rapidly develop the system along with ensuring system security.
 
-Recommendations: The software is developed with the support of AI so it cannot be absolutely secure, so please protect the Portal and API with a firewall to ensure safety. If you find any problems, please notify us and we will handle it..
 
 ## ✨ Key Features
 
@@ -30,6 +31,7 @@ Recommendations: The software is developed with the support of AI so it cannot b
 |----------|--------|-------------|
 | **New Server (Production)** | `./scripts/deploy.sh` | Full installation of Nginx + ModSecurity + Backend + Frontend with systemd services |
 | **Development/Testing** | `./scripts/quickstart.sh` | Quick run in dev mode (no Nginx installation, no root required) |
+| **Upgrade New Version** | `./scripts/update.sh` | Full update to new version |
 
 ### 🖥️ Production Deployment (New Server)
 
@@ -41,6 +43,17 @@ cd nginx-love
 # Run deployment script (requires root)
 bash scripts/deploy.sh
 ```
+
+### 🖥️ Production Upgrade Deployment (Upgrade New Version)
+
+```bash
+# Run Upgrade script (requires root)
+cd nginx-love
+git pull
+bash scripts/update.sh
+```
+
+
 
 **Minimum Requirements:**
 - Ubuntu/Debian server (22.04+ recommended)
