@@ -286,7 +286,7 @@ ${realIpBlock}
         ${shouldVerify ? 'proxy_ssl_verify on;' : 'proxy_ssl_verify off;'}
         proxy_ssl_server_name on;
         proxy_ssl_name ${domain.name};
-        proxy_ssl_protocols TLSv1.2 TLSv1.3;
+        proxy_ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
         `;
   }
 

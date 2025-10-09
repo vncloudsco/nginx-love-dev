@@ -328,7 +328,7 @@ server {
         }
         proxy_ssl_server_name on;
         proxy_ssl_name ${domain.name};
-        proxy_ssl_protocols TLSv1.2 TLSv1.3;
+        proxy_ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
         `
             : ''
         }
@@ -415,7 +415,7 @@ server {
         }
         proxy_ssl_server_name on;
         proxy_ssl_name ${domain.name};
-        proxy_ssl_protocols TLSv1.2 TLSv1.3;
+        proxy_ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
         `
             : ''
         }
