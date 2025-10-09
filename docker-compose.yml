@@ -47,8 +47,8 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       
       # JWT Configuration
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-this-to-random-secret}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-this-to-random-secret}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-07fda7ee-9613-48c3-b8ad-54d56a23445c}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-6dc381ae-88f6-428d-99a7-c1f24a7685ab}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       
@@ -59,7 +59,7 @@ services:
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
       
       # Session
-      SESSION_SECRET: ${SESSION_SECRET:-change-this-to-random-secret}
+      SESSION_SECRET: ${SESSION_SECRET:-ba715a25-ff58-4f06-bb48-4669a27e446f}
       
       # 2FA
       TWO_FACTOR_APP_NAME: ${TWO_FACTOR_APP_NAME:-Nginx WAF Admin}
@@ -105,7 +105,7 @@ services:
       - "${WEB_PORT:-8080}:8080"
     environment:
       # API Configuration
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:3001/api}
+      VITE_API_URL: ${VITE_API_URL:-https://ubiquitous-eureka-pwrxv5x6vg3rxp-3001.app.github.dev/api}
     networks:
       - nginx-love-network
     depends_on:
