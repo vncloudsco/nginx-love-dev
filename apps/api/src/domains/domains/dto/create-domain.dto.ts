@@ -1,4 +1,4 @@
-import { CreateUpstreamData, LoadBalancerConfigData } from '../domains.types';
+import { CreateUpstreamData, LoadBalancerConfigData, RealIpConfigData } from '../domains.types';
 
 /**
  * DTO for creating a new domain
@@ -8,4 +8,5 @@ export interface CreateDomainDto {
   upstreams: CreateUpstreamData[];
   loadBalancer?: LoadBalancerConfigData;
   modsecEnabled?: boolean;
+  realIpConfig?: RealIpConfigData;
 }

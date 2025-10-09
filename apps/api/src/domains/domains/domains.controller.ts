@@ -98,7 +98,7 @@ export class DomainsController {
         return;
       }
 
-      const { name, upstreams, loadBalancer, modsecEnabled } = req.body;
+      const { name, upstreams, loadBalancer, modsecEnabled, realIpConfig } = req.body;
 
       const domain = await domainsService.createDomain(
         {
@@ -106,6 +106,7 @@ export class DomainsController {
           upstreams,
           loadBalancer,
           modsecEnabled,
+          realIpConfig,
         },
         req.user!.userId,
         req.user!.username,
@@ -151,7 +152,7 @@ export class DomainsController {
       }
 
       const { id } = req.params;
-      const { name, status, modsecEnabled, upstreams, loadBalancer } = req.body;
+      const { name, status, modsecEnabled, upstreams, loadBalancer, realIpConfig } = req.body;
 
       const domain = await domainsService.updateDomain(
         id,
@@ -161,6 +162,7 @@ export class DomainsController {
           modsecEnabled,
           upstreams,
           loadBalancer,
+          realIpConfig,
         },
         req.user!.userId,
         req.user!.username,

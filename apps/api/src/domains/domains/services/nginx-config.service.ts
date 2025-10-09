@@ -3,6 +3,7 @@ import * as path from 'path';
 import logger from '../../../utils/logger';
 import { PATHS } from '../../../shared/constants/paths.constants';
 import { DomainWithRelations } from '../domains.types';
+import { cloudflareIpsService } from './cloudflare-ips.service';
 
 /**
  * Service for generating Nginx configuration files
@@ -28,8 +29,8 @@ export class NginxConfigService {
 
     // Generate configuration blocks
     const upstreamBlock = this.generateUpstreamBlock(domain);
-    const httpServerBlock = this.generateHttpServerBlock(domain);
-    const httpsServerBlock = this.generateHttpsServerBlock(domain);
+    const httpServerBlock = await this.generateHttpServerBlock(domain);
+    const httpsServerBlock = await this.generateHttpsServerBlock(domain);
 
     const fullConfig = upstreamBlock + httpServerBlock + httpsServerBlock;
 
@@ -85,10 +86,13 @@ upstream ${upstreamName}_backend {
   /**
    * Generate HTTP server block (always present)
    */
-  private generateHttpServerBlock(domain: DomainWithRelations): string {
+  private async generateHttpServerBlock(domain: DomainWithRelations): Promise<string> {
     const upstreamName = domain.name.replace(/\./g, '_');
     const hasHttpsUpstream = domain.upstreams.some((u) => u.protocol === 'https');
     const upstreamProtocol = hasHttpsUpstream ? 'https' : 'http';
+
+    // Generate Real IP block
+    const realIpBlock = await this.generateRealIpBlock(domain);
 
     // If SSL is enabled, HTTP server just redirects to HTTPS
     if (domain.sslEnabled) {
@@ -97,6 +101,7 @@ server {
     listen 80;
     server_name ${domain.name};
 
+${realIpBlock}
     # Include ACL rules (IP whitelist/blacklist)
     include /etc/nginx/conf.d/acl-rules.conf;
 
@@ -115,6 +120,7 @@ server {
     listen 80;
     server_name ${domain.name};
 
+${realIpBlock}
     # Include ACL rules (IP whitelist/blacklist)
     include /etc/nginx/conf.d/acl-rules.conf;
 
@@ -127,11 +133,8 @@ server {
     error_log /var/log/nginx/${domain.name}_error.log warn;
 
     location / {
+        ${this.generateProxyHeaders(domain)}
         proxy_pass ${upstreamProtocol}://${upstreamName}_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
 
         ${this.generateHttpsBackendSettings(domain)}
 
@@ -150,7 +153,7 @@ server {
   /**
    * Generate HTTPS server block (only if SSL enabled)
    */
-  private generateHttpsServerBlock(domain: DomainWithRelations): string {
+  private async generateHttpsServerBlock(domain: DomainWithRelations): Promise<string> {
     if (!domain.sslEnabled || !domain.sslCertificate) {
       return '';
     }
@@ -159,11 +162,15 @@ server {
     const hasHttpsUpstream = domain.upstreams.some((u) => u.protocol === 'https');
     const upstreamProtocol = hasHttpsUpstream ? 'https' : 'http';
 
+    // Generate Real IP block
+    const realIpBlock = await this.generateRealIpBlock(domain);
+
     return `
 server {
     listen 443 ssl http2;
     server_name ${domain.name};
 
+${realIpBlock}
     # Include ACL rules (IP whitelist/blacklist)
     include /etc/nginx/conf.d/acl-rules.conf;
 
@@ -193,11 +200,8 @@ server {
     error_log /var/log/nginx/${domain.name}_ssl_error.log warn;
 
     location / {
+        ${this.generateProxyHeaders(domain)}
         proxy_pass ${upstreamProtocol}://${upstreamName}_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
 
         ${this.generateHttpsBackendSettings(domain)}
 
@@ -211,6 +215,57 @@ server {
     }
 }
 `;
+  }
+
+  /**
+   * Generate Real IP configuration block
+   * Supports Cloudflare IP ranges (auto-fetched) and custom CIDRs
+   */
+  private async generateRealIpBlock(domain: DomainWithRelations): Promise<string> {
+    if (!domain.realIpEnabled) {
+      return '';
+    }
+
+    const lines: string[] = [];
+    lines.push('    # Real IP Configuration');
+
+    // Cloudflare IP ranges (fetched from Cloudflare or fallback)
+    if (domain.realIpCloudflare) {
+      try {
+        const cloudflareIPs = await cloudflareIpsService.getCloudflareIPs();
+        cloudflareIPs.forEach(ip => {
+          lines.push(`    set_real_ip_from ${ip};`);
+        });
+      } catch (error) {
+        logger.error('Failed to get Cloudflare IPs, skipping Real IP config', error);
+        logger.error('Failed to fetch Cloudflare IPs for Real IP configuration, disabling Real IP for this domain', error);
+        return '';
+      }
+    }
+
+    // Custom CIDR ranges
+    if (domain.realIpCustomCidrs && domain.realIpCustomCidrs.length > 0) {
+      domain.realIpCustomCidrs.forEach(cidr => {
+        lines.push(`    set_real_ip_from ${cidr};`);
+      });
+    }
+
+    // Set the header to use for real IP
+    lines.push('    real_ip_header X-Forwarded-For;');
+    lines.push('    real_ip_recursive on;');
+    lines.push('');
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Generate proxy headers for passing client information to backend
+   */
+  private generateProxyHeaders(domain: DomainWithRelations): string {
+    return `proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;`;
   }
 
   /**
@@ -232,7 +287,7 @@ server {
         ${shouldVerify ? 'proxy_ssl_verify on;' : 'proxy_ssl_verify off;'}
         proxy_ssl_server_name on;
         proxy_ssl_name ${domain.name};
-        proxy_ssl_protocols TLSv1.2 TLSv1.3;
+        proxy_ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
         `;
   }
 

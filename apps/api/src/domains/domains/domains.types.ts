@@ -32,12 +32,20 @@ export interface LoadBalancerConfigData {
   healthCheckPath?: string;
 }
 
+// Real IP configuration data
+export interface RealIpConfigData {
+  realIpEnabled?: boolean;
+  realIpCloudflare?: boolean;
+  realIpCustomCidrs?: string[];
+}
+
 // Domain creation input
 export interface CreateDomainInput {
   name: string;
   upstreams: CreateUpstreamData[];
   loadBalancer?: LoadBalancerConfigData;
   modsecEnabled?: boolean;
+  realIpConfig?: RealIpConfigData;
 }
 
 // Domain update input
@@ -47,6 +55,7 @@ export interface UpdateDomainInput {
   modsecEnabled?: boolean;
   upstreams?: CreateUpstreamData[];
   loadBalancer?: LoadBalancerConfigData;
+  realIpConfig?: RealIpConfigData;
 }
 
 // Domain query filters
