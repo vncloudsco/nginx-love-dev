@@ -238,6 +238,7 @@ ${realIpBlock}
         });
       } catch (error) {
         logger.error('Failed to get Cloudflare IPs, skipping Real IP config', error);
+        logger.error('Failed to fetch Cloudflare IPs for Real IP configuration, disabling Real IP for this domain', error);
         return '';
       }
     }
@@ -286,7 +287,7 @@ ${realIpBlock}
         ${shouldVerify ? 'proxy_ssl_verify on;' : 'proxy_ssl_verify off;'}
         proxy_ssl_server_name on;
         proxy_ssl_name ${domain.name};
-        proxy_ssl_protocols TLSv1.2 TLSv1.3;
+        proxy_ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
         `;
   }
 

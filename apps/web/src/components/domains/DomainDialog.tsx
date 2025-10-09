@@ -85,6 +85,8 @@ export function DomainDialog({ open, onOpenChange, domain, onSave }: DomainDialo
           healthCheckTimeout: domain.loadBalancer?.healthCheckTimeout || 5,
           realIpEnabled: (domain as any).realIpEnabled || false,
           realIpCloudflare: (domain as any).realIpCloudflare || false,
+          realIpEnabled: domain?.realIpEnabled || false,
+          realIpCloudflare: domain?.realIpCloudflare || false,
         });
         
         // Populate upstreams
