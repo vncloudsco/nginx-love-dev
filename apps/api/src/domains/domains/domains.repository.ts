@@ -136,6 +136,9 @@ export class DomainsRepository {
         name: input.name,
         status: 'inactive' as const,
         modsecEnabled: input.modsecEnabled !== undefined ? input.modsecEnabled : true,
+        realIpEnabled: input.realIpConfig?.realIpEnabled || false,
+        realIpCloudflare: input.realIpConfig?.realIpCloudflare || false,
+        realIpCustomCidrs: input.realIpConfig?.realIpCustomCidrs || [],
         upstreams: {
           create: input.upstreams.map((u: CreateUpstreamData) => ({
             host: u.host,
@@ -211,6 +214,18 @@ export class DomainsRepository {
           input.modsecEnabled !== undefined
             ? input.modsecEnabled
             : currentDomain.modsecEnabled,
+        realIpEnabled:
+          input.realIpConfig?.realIpEnabled !== undefined
+            ? input.realIpConfig.realIpEnabled
+            : currentDomain.realIpEnabled,
+        realIpCloudflare:
+          input.realIpConfig?.realIpCloudflare !== undefined
+            ? input.realIpConfig.realIpCloudflare
+            : currentDomain.realIpCloudflare,
+        realIpCustomCidrs:
+          input.realIpConfig?.realIpCustomCidrs !== undefined
+            ? input.realIpConfig.realIpCustomCidrs
+            : currentDomain.realIpCustomCidrs,
       },
     });
 

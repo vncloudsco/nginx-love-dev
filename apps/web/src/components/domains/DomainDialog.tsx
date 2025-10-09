@@ -52,6 +52,8 @@ export function DomainDialog({ open, onOpenChange, domain, onSave }: DomainDialo
     healthCheckPath: '/health',
     healthCheckInterval: 30,
     healthCheckTimeout: 5,
+    realIpEnabled: false,
+    realIpCloudflare: false,
   });
 
   const [upstreams, setUpstreams] = useState<UpstreamFormData[]>([
@@ -81,6 +83,8 @@ export function DomainDialog({ open, onOpenChange, domain, onSave }: DomainDialo
           healthCheckPath: domain.loadBalancer?.healthCheckPath || '/health',
           healthCheckInterval: domain.loadBalancer?.healthCheckInterval || 30,
           healthCheckTimeout: domain.loadBalancer?.healthCheckTimeout || 5,
+          realIpEnabled: (domain as any).realIpEnabled || false,
+          realIpCloudflare: (domain as any).realIpCloudflare || false,
         });
         
         // Populate upstreams
@@ -107,6 +111,8 @@ export function DomainDialog({ open, onOpenChange, domain, onSave }: DomainDialo
           healthCheckPath: '/health',
           healthCheckInterval: 30,
           healthCheckTimeout: 5,
+          realIpEnabled: false,
+          realIpCloudflare: false,
         });
         setUpstreams([
           {
@@ -164,6 +170,11 @@ export function DomainDialog({ open, onOpenChange, domain, onSave }: DomainDialo
         healthCheckInterval: formData.healthCheckInterval,
         healthCheckTimeout: formData.healthCheckTimeout,
         healthCheckPath: formData.healthCheckPath,
+      },
+      realIpConfig: {
+        realIpEnabled: formData.realIpEnabled,
+        realIpCloudflare: formData.realIpCloudflare,
+        realIpCustomCidrs: [],
       },
     };
 
@@ -420,6 +431,42 @@ export function DomainDialog({ open, onOpenChange, domain, onSave }: DomainDialo
                 }
               />
             </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="realIp">Enable Real IP Detection</Label>
+                <p className="text-sm text-muted-foreground">
+                  Get real client IP from proxy headers
+                </p>
+              </div>
+              <Switch
+                id="realIp"
+                checked={formData.realIpEnabled}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, realIpEnabled: checked })
+                }
+              />
+            </div>
+
+            {formData.realIpEnabled && (
+              <div className="space-y-4 ml-4 border-l-2 pl-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="cloudflare">Use Cloudflare IP Ranges</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Automatically trust all Cloudflare IPs
+                    </p>
+                  </div>
+                  <Switch
+                    id="cloudflare"
+                    checked={formData.realIpCloudflare}
+                    onCheckedChange={(checked) =>
+                      setFormData({ ...formData, realIpCloudflare: checked })
+                    }
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between">
               <div>
