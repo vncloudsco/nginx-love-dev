@@ -88,7 +88,7 @@ update_status "modsecurity_download" "running" "Downloading ModSecurity..."
 
 cd /usr/local/src
 if [ ! -d "ModSecurity" ]; then
-    git clone --depth 1 -b v${MODSECURITY_VERSION} --single-branch https://github.com/SpiderLabs/ModSecurity >> "${INSTALL_LOG}" 2>&1 || error_exit "Failed to clone ModSecurity"
+    git clone --depth 1 -b v${MODSECURITY_VERSION} --single-branch https://github.com/owasp-modsecurity/ModSecurity >> "${INSTALL_LOG}" 2>&1 || error_exit "Failed to clone ModSecurity"
 fi
 
 log "ModSecurity downloaded successfully"
@@ -115,7 +115,7 @@ update_status "connector_download" "running" "Downloading ModSecurity-nginx conn
 
 cd /usr/local/src
 if [ ! -d "ModSecurity-nginx" ]; then
-    git clone --depth 1 https://github.com/SpiderLabs/ModSecurity-nginx.git >> "${INSTALL_LOG}" 2>&1 || error_exit "Failed to clone ModSecurity-nginx"
+    git clone --depth 1 https://github.com/owasp-modsecurity/ModSecurity-nginx.git >> "${INSTALL_LOG}" 2>&1 || error_exit "Failed to clone ModSecurity-nginx"
 fi
 
 log "ModSecurity-nginx connector downloaded"
