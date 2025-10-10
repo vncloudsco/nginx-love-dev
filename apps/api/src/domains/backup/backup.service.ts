@@ -42,7 +42,7 @@ export class BackupService {
       await execAsync('nginx -t');
 
       logger.info('Reloading nginx...');
-      await execAsync('systemctl reload nginx');
+      await execAsync('nginx -s reload');
 
       logger.info('Nginx reloaded successfully');
       return true;
