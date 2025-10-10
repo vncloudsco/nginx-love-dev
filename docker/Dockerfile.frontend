@@ -21,6 +21,11 @@ RUN pnpm install --frozen-lockfile
 
 # Copy the entire web application source code
 COPY ../apps/web ./apps/web
+
+# Accept build args for environment variables
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 # Build the Vite React application
 RUN pnpm --filter @nginx-love/web build
 

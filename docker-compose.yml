@@ -5,6 +5,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: nginx-love-postgres
+    hostname: postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-nginx_waf}
@@ -15,7 +16,8 @@ services:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./apps/api/prisma/migrations:/docker-entrypoint-initdb.d
+      - ./docker/database.sql:/docker-entrypoint-initdb.d/01-database.sql:ro
+      - ./docker/apps/api/prisma/migrations:/docker-entrypoint-initdb.d/migrations
     networks:
       - nginx-love-network
     healthcheck:
@@ -99,13 +101,11 @@ services:
       dockerfile: docker/Dockerfile.frontend
       args:
         - NODE_ENV=${NODE_ENV:-production}
+        - VITE_API_URL=${VITE_API_URL:-http://167.172.76.108:3001/api}
     container_name: nginx-love-frontend
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-8080}:8080"
-    environment:
-      # API Configuration
-      VITE_API_URL: ${VITE_API_URL:-https://ubiquitous-eureka-pwrxv5x6vg3rxp-3001.app.github.dev/api}
     networks:
       - nginx-love-network
     depends_on:
@@ -118,28 +118,8 @@ services:
       retries: 3
       start_period: 30s
 
-  # Redis Cache (Optional - for session storage and caching)
-  redis:
-    image: redis:7-alpine
-    container_name: nginx-love-redis
-    restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
-    volumes:
-      - redis_data:/data
-    networks:
-      - nginx-love-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
     driver: local
   backup:
     driver: local
