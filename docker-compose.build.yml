@@ -29,7 +29,10 @@ services:
 
   # Backend API Service
   backend:
-    image: vouu/nginx-waf-backend:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: nginx-love-backend
     restart: unless-stopped
     
     ports:

@@ -18,7 +18,7 @@ COPY /docker/apps/api/package.json ./apps/api/
 RUN pnpm install --frozen-lockfile
 
 # Copy source code
-COPY apps/api ./apps/api
+COPY /docker/apps/api ./apps/api
 
 # Generate Prisma client
 RUN cd apps/api && pnpm prisma:generate

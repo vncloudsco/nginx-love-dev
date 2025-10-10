@@ -21,9 +21,10 @@ let slaveStatusTimer: NodeJS.Timeout | null = null;
 
 // CORS
 app.use(cors({
-  origin: '*',
+  origin: config.cors.origin,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  credentials: true,
 }));
 // Body parser
 app.use(express.json());
@@ -60,7 +61,7 @@ modSecSetupService.initializeModSecurityConfig().catch((error) => {
 
 const server = app.listen(PORT, () => {
   logger.info(`🚀 Server running on port ${PORT} in ${config.nodeEnv} mode`);
-  // logger.info(`📡 CORS enabled for: ${config.cors.origin}`);
+  logger.info(`📡 CORS enabled for: ${config.cors.origin}`);
   
   // Start alert monitoring service (global scan every 10 seconds)
   // Each rule has its own checkInterval for when to actually check
