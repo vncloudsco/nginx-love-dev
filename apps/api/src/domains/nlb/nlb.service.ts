@@ -86,6 +86,17 @@ export class NLBService {
       // Update status to active
       await this.repository.updateStatus(nlb.id, 'active');
       
+      // Perform initial health check if enabled
+      if (nlb.healthCheckEnabled) {
+        try {
+          await this.performHealthCheck(nlb.id);
+          logger.info(`Initial health check completed for NLB: ${nlb.name}`);
+        } catch (error) {
+          logger.warn(`Initial health check failed for NLB: ${nlb.name}`, error);
+          // Don't fail NLB creation if health check fails
+        }
+      }
+      
       logger.info(`NLB created successfully: ${nlb.name}`);
       return this.repository.findById(nlb.id) as Promise<NLBWithRelations>;
     } catch (error) {

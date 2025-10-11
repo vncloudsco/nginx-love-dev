@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { useCreateNLB, useUpdateNLB } from '@/queries/nlb.query-options';
 import { NetworkLoadBalancer, CreateNLBInput, NLBUpstream } from '@/types';
 import {
@@ -142,8 +142,10 @@ export default function NLBFormDialog({ isOpen, onClose, nlb, mode }: NLBFormDia
         port: Number(data.port),
         proxyTimeout: Number(data.proxyTimeout),
         proxyConnectTimeout: Number(data.proxyConnectTimeout),
+        proxyNextUpstream: Boolean(data.proxyNextUpstream),
         proxyNextUpstreamTimeout: Number(data.proxyNextUpstreamTimeout),
         proxyNextUpstreamTries: Number(data.proxyNextUpstreamTries),
+        healthCheckEnabled: Boolean(data.healthCheckEnabled),
         healthCheckInterval: Number(data.healthCheckInterval),
         healthCheckTimeout: Number(data.healthCheckTimeout),
         healthCheckRises: Number(data.healthCheckRises),
@@ -155,6 +157,8 @@ export default function NLBFormDialog({ isOpen, onClose, nlb, mode }: NLBFormDia
           maxFails: Number(upstream.maxFails),
           failTimeout: Number(upstream.failTimeout),
           maxConns: Number(upstream.maxConns),
+          backup: Boolean(upstream.backup),
+          down: Boolean(upstream.down),
         })),
       };
 
@@ -386,9 +390,16 @@ export default function NLBFormDialog({ isOpen, onClose, nlb, mode }: NLBFormDia
 
                         <TooltipProvider>
                           <div className="flex items-center space-x-2">
-                            <Switch
-                              id={`backup-${index}`}
-                              {...register(`upstreams.${index}.backup`)}
+                            <Controller
+                              name={`upstreams.${index}.backup`}
+                              control={control}
+                              render={({ field }) => (
+                                <Switch
+                                  id={`backup-${index}`}
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              )}
                             />
                             <Label htmlFor={`backup-${index}`}>Backup</Label>
                             <Tooltip>
@@ -404,9 +415,16 @@ export default function NLBFormDialog({ isOpen, onClose, nlb, mode }: NLBFormDia
 
                         <TooltipProvider>
                           <div className="flex items-center space-x-2">
-                            <Switch
-                              id={`down-${index}`}
-                              {...register(`upstreams.${index}.down`)}
+                            <Controller
+                              name={`upstreams.${index}.down`}
+                              control={control}
+                              render={({ field }) => (
+                                <Switch
+                                  id={`down-${index}`}
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                />
+                              )}
                             />
                             <Label htmlFor={`down-${index}`}>Mark Down</Label>
                             <Tooltip>
@@ -449,7 +467,17 @@ export default function NLBFormDialog({ isOpen, onClose, nlb, mode }: NLBFormDia
 
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center space-x-2">
-                    <Switch id="proxyNextUpstream" {...register('proxyNextUpstream')} />
+                    <Controller
+                      name="proxyNextUpstream"
+                      control={control}
+                      render={({ field }) => (
+                        <Switch
+                          id="proxyNextUpstream"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      )}
+                    />
                     <Label htmlFor="proxyNextUpstream">Enable Proxy Next Upstream</Label>
                   </div>
                 </div>
@@ -478,7 +506,17 @@ export default function NLBFormDialog({ isOpen, onClose, nlb, mode }: NLBFormDia
               <div className="pt-4 border-t">
                 <h4 className="text-sm font-medium mb-4">Health Check Settings</h4>
                 <div className="flex items-center space-x-2 mb-4">
-                  <Switch id="healthCheckEnabled" {...register('healthCheckEnabled')} />
+                  <Controller
+                    name="healthCheckEnabled"
+                    control={control}
+                    render={({ field }) => (
+                      <Switch
+                        id="healthCheckEnabled"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    )}
+                  />
                   <Label htmlFor="healthCheckEnabled">Enable Health Checks</Label>
                 </div>
 

@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import logger from '../../utils/logger';
 import {
   NLBWithRelations,
   NLBQueryOptions,
@@ -345,8 +346,10 @@ export class NLBRepository {
     ]);
 
     const totalUpstreams = upstreamStats.reduce((acc, stat) => acc + stat._count, 0);
-    const healthyUpstreams = upstreamStats.find((s) => s.status === 'up')?._count || 0;
-    const unhealthyUpstreams = totalUpstreams - healthyUpstreams;
+    const healthyUpstreams = upstreamStats
+      .filter((s) => s.status === 'up' || s.status === 'checking')
+      .reduce((acc, stat) => acc + stat._count, 0);
+    const unhealthyUpstreams = upstreamStats.find((s) => s.status === 'down')?._count || 0;
 
     return {
       totalNLBs,
