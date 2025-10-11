@@ -95,7 +95,7 @@ services:
       dockerfile: docker/Dockerfile.frontend
       args:
         - NODE_ENV=${NODE_ENV:-production}
-        - VITE_API_URL=${VITE_API_URL:-http://167.172.76.108:3001/api}
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:3001/api}
     container_name: nginx-love-frontend
     restart: unless-stopped
     ports:
