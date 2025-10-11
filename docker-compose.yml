@@ -33,7 +33,11 @@ services:
     restart: unless-stopped
     container_name: nginx-love-backend
     hostname: backend
-    network_mode: host
+    ports:
+      - "${API_PORT:-3001}:3001"
+      - "80:80"
+      - "443:443"
+      # add more port for NLB
     environment:
       # Database Configuration
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-nginx_waf}?schema=public"
@@ -85,7 +89,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
+    networks:
+      - nginx-love-network
   # Frontend Web Service
   frontend:
     build:
