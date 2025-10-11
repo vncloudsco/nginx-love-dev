@@ -19,7 +19,8 @@ import {
   Languages,
   User,
   Settings,
-  LogOut
+  LogOut,
+  Network,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -78,6 +79,7 @@ const menuGroups = [
   {
     title: 'System',
     items: [
+      { key: 'network', icon: Network, path: '/network' },
       { key: 'backup', icon: Database, path: '/backup' },
       { key: 'users', icon: Users, path: '/users' },
       { key: 'nodes', icon: Server, path: '/nodes' },

@@ -15,6 +15,7 @@ import dashboardRoutes from '../domains/dashboard/dashboard.routes';
 import backupRoutes from '../domains/backup/backup.routes';
 import slaveRoutes from '../domains/cluster/cluster.routes';
 import nodeSyncRoutes from '../domains/cluster/node-sync.routes';
+import nlbRoutes from '../domains/nlb/nlb.routes';
 
 const router = Router();
 
@@ -44,5 +45,6 @@ router.use('/backup', backupRoutes);
 router.use('/slave', slaveRoutes);
 router.use('/system-config', systemConfigRoutes);
 router.use('/node-sync', nodeSyncRoutes);
+router.use('/nlb', nlbRoutes);
 
 export default router;
