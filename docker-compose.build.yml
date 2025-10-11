@@ -17,7 +17,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/database.sql:/docker-entrypoint-initdb.d/01-database.sql:ro
-      - ./docker/apps/api/prisma/migrations:/docker-entrypoint-initdb.d/migrations
+      - ./apps/api/prisma/migrations:/docker-entrypoint-initdb.d/migrations
     networks:
       - nginx-love-network
     healthcheck:
