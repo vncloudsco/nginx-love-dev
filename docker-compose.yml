@@ -31,11 +31,9 @@ services:
   backend:
     image: vouu/nginx-waf-backend:latest
     restart: unless-stopped
-    
-    ports:
-      - "${API_PORT:-3001}:3001"
-      - "80:80"
-      - "443:443"
+    container_name: nginx-love-backend
+    hostname: backend
+    network_mode: host
     environment:
       # Database Configuration
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-nginx_waf}?schema=public"
