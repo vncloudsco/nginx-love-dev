@@ -12,7 +12,7 @@ COPY /docker/package.json pnpm-lock.yaml ./
 COPY /docker/turbo.json ./
 
 # Copy app package files
-COPY /docker/apps/api/package.json ./apps/api/
+COPY /apps/api/package.json ./apps/api/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
