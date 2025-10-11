@@ -29,7 +29,7 @@ services:
 
   # Backend API Service
   backend:
-    image: vouu/nginx-waf-backend:latest
+    image: vouu/nginx-waf-backend:ubuntu
     restart: unless-stopped
     container_name: nginx-love-backend
     network_mode: host
