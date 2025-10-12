@@ -45,5 +45,7 @@ landing/*
 .env
 .pnpm-store/
 .seeded
-*.md
+/*.md
+/apps/api/*.md
+/apps/web/*.md
 /docs/*
