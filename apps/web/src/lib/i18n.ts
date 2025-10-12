@@ -16,6 +16,7 @@ const resources = {
       'nav.backup': 'Backup & Restore',
       'nav.users': 'User Management',
       'nav.nodes': 'Slave Nodes',
+      'nav.network': 'Network Manager',
       
       // Login
       'login.title': 'Admin Portal',
@@ -73,6 +74,7 @@ const resources = {
       'nav.backup': 'Sao lưu & Khôi phục',
       'nav.users': 'Quản lý người dùng',
       'nav.nodes': 'Nút phụ',
+      'nav.network': 'Quản lý mạng',
       
       // Login
       'login.title': 'Cổng Quản Trị',

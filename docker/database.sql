@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict YvxuzPHp5BbUt2Tk0I7PgEj4k0vX1B5HV6Iyi86RE1sb8eXISEIGef4a8kLRWP9
+\restrict D9RqwATSuX8K9jCoc1z48HRaclEaPRyIbprgO4mmn2EDCcSqBtzOROxAKg8lbT1
 
 -- Dumped from database version 15.14
 -- Dumped by pg_dump version 15.14
@@ -128,6 +128,55 @@ CREATE TYPE public."LoadBalancerAlgorithm" AS ENUM (
     'round_robin',
     'least_conn',
     'ip_hash'
+);
+
+
+
+--
+-- Name: NLBAlgorithm; Type: TYPE; Schema: public; Owner: nginx_love_user
+--
+
+CREATE TYPE public."NLBAlgorithm" AS ENUM (
+    'round_robin',
+    'least_conn',
+    'ip_hash',
+    'hash'
+);
+
+
+
+--
+-- Name: NLBProtocol; Type: TYPE; Schema: public; Owner: nginx_love_user
+--
+
+CREATE TYPE public."NLBProtocol" AS ENUM (
+    'tcp',
+    'udp',
+    'tcp_udp'
+);
+
+
+
+--
+-- Name: NLBStatus; Type: TYPE; Schema: public; Owner: nginx_love_user
+--
+
+CREATE TYPE public."NLBStatus" AS ENUM (
+    'active',
+    'inactive',
+    'error'
+);
+
+
+
+--
+-- Name: NLBUpstreamStatus; Type: TYPE; Schema: public; Owner: nginx_love_user
+--
+
+CREATE TYPE public."NLBUpstreamStatus" AS ENUM (
+    'up',
+    'down',
+    'checking'
 );
 
 
@@ -514,6 +563,35 @@ CREATE TABLE public.modsec_rules (
 
 
 --
+-- Name: network_load_balancers; Type: TABLE; Schema: public; Owner: nginx_love_user
+--
+
+CREATE TABLE public.network_load_balancers (
+    id text NOT NULL,
+    name text NOT NULL,
+    description text,
+    port integer NOT NULL,
+    protocol public."NLBProtocol" DEFAULT 'tcp'::public."NLBProtocol" NOT NULL,
+    algorithm public."NLBAlgorithm" DEFAULT 'round_robin'::public."NLBAlgorithm" NOT NULL,
+    status public."NLBStatus" DEFAULT 'inactive'::public."NLBStatus" NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    "proxyTimeout" integer DEFAULT 3 NOT NULL,
+    "proxyConnectTimeout" integer DEFAULT 1 NOT NULL,
+    "proxyNextUpstream" boolean DEFAULT true NOT NULL,
+    "proxyNextUpstreamTimeout" integer DEFAULT 0 NOT NULL,
+    "proxyNextUpstreamTries" integer DEFAULT 0 NOT NULL,
+    "healthCheckEnabled" boolean DEFAULT true NOT NULL,
+    "healthCheckInterval" integer DEFAULT 10 NOT NULL,
+    "healthCheckTimeout" integer DEFAULT 5 NOT NULL,
+    "healthCheckRises" integer DEFAULT 2 NOT NULL,
+    "healthCheckFalls" integer DEFAULT 3 NOT NULL,
+    "createdAt" timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "updatedAt" timestamp(3) without time zone NOT NULL
+);
+
+
+
+--
 -- Name: nginx_configs; Type: TABLE; Schema: public; Owner: nginx_love_user
 --
 
@@ -523,6 +601,48 @@ CREATE TABLE public.nginx_configs (
     name text NOT NULL,
     content text NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
+    "createdAt" timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    "updatedAt" timestamp(3) without time zone NOT NULL
+);
+
+
+
+--
+-- Name: nlb_health_checks; Type: TABLE; Schema: public; Owner: nginx_love_user
+--
+
+CREATE TABLE public.nlb_health_checks (
+    id text NOT NULL,
+    "nlbId" text NOT NULL,
+    "upstreamHost" text NOT NULL,
+    "upstreamPort" integer NOT NULL,
+    status public."NLBUpstreamStatus" NOT NULL,
+    "responseTime" double precision,
+    error text,
+    "checkedAt" timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+
+--
+-- Name: nlb_upstreams; Type: TABLE; Schema: public; Owner: nginx_love_user
+--
+
+CREATE TABLE public.nlb_upstreams (
+    id text NOT NULL,
+    "nlbId" text NOT NULL,
+    host text NOT NULL,
+    port integer NOT NULL,
+    weight integer DEFAULT 1 NOT NULL,
+    "maxFails" integer DEFAULT 3 NOT NULL,
+    "failTimeout" integer DEFAULT 10 NOT NULL,
+    "maxConns" integer DEFAULT 0 NOT NULL,
+    backup boolean DEFAULT false NOT NULL,
+    down boolean DEFAULT false NOT NULL,
+    status public."NLBUpstreamStatus" DEFAULT 'checking'::public."NLBUpstreamStatus" NOT NULL,
+    "lastCheck" timestamp(3) without time zone,
+    "lastError" text,
+    "responseTime" double precision,
     "createdAt" timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     "updatedAt" timestamp(3) without time zone NOT NULL
 );
@@ -778,20 +898,21 @@ ALTER TABLE ONLY public.config_versions ALTER COLUMN version SET DEFAULT nextval
 --
 
 COPY public._prisma_migrations (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count) FROM stdin;
-99ee734e-834f-4199-9228-fb6c2acb1383	52f51d0c3871786adabd525433fb601834dc12c011e66737dedc7ff87ce6f85f	2025-10-10 03:51:00.313147+00	20250930140957_initial_setup	\N	\N	2025-10-10 03:51:00.077895+00	1
-117274cd-8bb8-48ee-8bae-f0e87430bc90	bf64c880e3efeeca15993664d9a046d87aa6b457258ab4da11f4b20bdfdcd520	2025-10-10 03:51:01.216041+00	20251009081041_add_real_ip_config	\N	\N	2025-10-10 03:51:01.205241+00	1
-e7e83705-9f7b-4c5c-8285-89873ebd6c7b	dc878ea3eee4e078d8304194e2c17c4cc334cff6fba509cfcbcfa9ef1c1d1c74	2025-10-10 03:51:00.554494+00	20250930155130_add_domain_management	\N	\N	2025-10-10 03:51:00.315519+00	1
-61cd1e77-bea2-49f1-925e-d1107bbd7fad	85ef35e80b41bf91b69854dc7711a9eb017804578bcf9fca362c2ffdc0a6c1ab	2025-10-10 03:51:00.574418+00	20250930165732_add_upstream_https_support	\N	\N	2025-10-10 03:51:00.558058+00	1
-d0c93579-c9cf-4c1f-b54f-4e40f8cf5eae	3cdf7355c7d5d791f16d7b2a061a7e7fd228ff718b90e0167ffeea695e56c2df	2025-10-10 03:51:00.67535+00	20251001083220_separate_crs_and_custom_rules	\N	\N	2025-10-10 03:51:00.57734+00	1
-37cad739-c6ae-4cab-9c7d-acd9ae14fa95	122d743a0403e77ad7e0ed9447f5b8826f2fbdbc55612d936eff004dd13c2eec	2025-10-10 03:51:00.697747+00	20251001083755_separate_crs_and_custom_rules	\N	\N	2025-10-10 03:51:00.677898+00	1
-406ea014-c204-4239-9010-4cece1bdeb7e	97e03fac137c6999ddb4e0e02e99ac83e09abc9547e3cd9b71df1a375ae2c639	2025-10-10 03:51:00.846724+00	20251001163237_add_performance_metrics	\N	\N	2025-10-10 03:51:00.701483+00	1
-ddd1aeb6-e3c9-4c55-9e0c-da308aa454e5	d62ebb21a74bfe6d27089020c012f0485b01cee7ac2a62f9cf2898023788c1a0	2025-10-10 03:51:00.893723+00	20251002030304_add_alert_history	\N	\N	2025-10-10 03:51:00.851874+00	1
-782acd95-87f8-4f98-a36a-77fa2c5fd74b	c52aeec6f10e1008a2684a58ead83b6fde907f382a4b4dff12f786e56576065c	2025-10-10 03:51:00.963974+00	20251006033542_add_backup_feature	\N	\N	2025-10-10 03:51:00.896201+00	1
-62770d93-4809-4fad-bd3c-af398470e222	832894d3ca4a4d59108162c05ee9b41b7c0f7febbfe263c6dbaaf6c31d51cedd	2025-10-10 03:51:01.087398+00	20251006084450_add_slave_node_feature	\N	\N	2025-10-10 03:51:00.967473+00	1
-d32d1898-64af-4352-bef8-e3b44e55d51e	72bb704fa65ff06af156dab94e86bf9afd17b49da905306c56772c331609c249	2025-10-10 03:51:01.159381+00	20251006092848_add_system_config_and_node_mode	\N	\N	2025-10-10 03:51:01.105742+00	1
-0b5a72d9-ff63-4ec9-acb3-cc1a5479a514	3e93e0b05e4852855cd3ed3f8cf8a354295b2167381489a76ff4c541ab774adf	2025-10-10 03:51:01.175082+00	20251007145737_make_activity_log_user_id_optional	\N	\N	2025-10-10 03:51:01.161915+00	1
-7c8654d8-fdd6-49d3-86fc-265c2181ee5b	56ffe8075275105c06c497b4c19c225f8da03eeedae6db084d54ebd3b8039c64	2025-10-10 03:51:01.191869+00	20251008110124_add_first_login_flag	\N	\N	2025-10-10 03:51:01.178549+00	1
-dc94bb4f-eed1-4648-aed2-afe11abbdf59	122d743a0403e77ad7e0ed9447f5b8826f2fbdbc55612d936eff004dd13c2eec	2025-10-10 03:51:01.202517+00	20251009081000_add_real_ip_config	\N	\N	2025-10-10 03:51:01.195348+00	1
+61239e28-579e-4c9c-9003-47e715120601	52f51d0c3871786adabd525433fb601834dc12c011e66737dedc7ff87ce6f85f	2025-10-11 12:07:54.448894+00	20250930140957_initial_setup	\N	\N	2025-10-11 12:07:54.175873+00	1
+865bb3b8-db20-4525-8634-094f809971a2	bf64c880e3efeeca15993664d9a046d87aa6b457258ab4da11f4b20bdfdcd520	2025-10-11 12:07:55.422931+00	20251009081041_add_real_ip_config	\N	\N	2025-10-11 12:07:55.408763+00	1
+fa4865ca-6ec7-425a-8fc4-b490dcac977f	dc878ea3eee4e078d8304194e2c17c4cc334cff6fba509cfcbcfa9ef1c1d1c74	2025-10-11 12:07:54.702259+00	20250930155130_add_domain_management	\N	\N	2025-10-11 12:07:54.453176+00	1
+d1e57b78-a840-4ec7-9360-b7b18f21eedb	85ef35e80b41bf91b69854dc7711a9eb017804578bcf9fca362c2ffdc0a6c1ab	2025-10-11 12:07:54.726396+00	20250930165732_add_upstream_https_support	\N	\N	2025-10-11 12:07:54.70644+00	1
+4d5106c1-9a97-4f54-86db-ce84ca79ab68	3cdf7355c7d5d791f16d7b2a061a7e7fd228ff718b90e0167ffeea695e56c2df	2025-10-11 12:07:54.857405+00	20251001083220_separate_crs_and_custom_rules	\N	\N	2025-10-11 12:07:54.731777+00	1
+3ae6fee1-e609-4858-ab19-7b9ac9506207	683ac9d4e416439c11b2732d0583395ee3496cef7d3d9129b91215409d96c9e5	2025-10-11 12:07:55.570659+00	20251011072500_add_network_load_balancer	\N	\N	2025-10-11 12:07:55.42802+00	1
+3bc8e38a-ce3c-4c9b-ba43-516a8550abdc	122d743a0403e77ad7e0ed9447f5b8826f2fbdbc55612d936eff004dd13c2eec	2025-10-11 12:07:54.867909+00	20251001083755_separate_crs_and_custom_rules	\N	\N	2025-10-11 12:07:54.861313+00	1
+c7817951-f890-4a59-9413-5f868cf3d0c1	97e03fac137c6999ddb4e0e02e99ac83e09abc9547e3cd9b71df1a375ae2c639	2025-10-11 12:07:55.052792+00	20251001163237_add_performance_metrics	\N	\N	2025-10-11 12:07:54.871886+00	1
+2e41913c-2d76-4d50-a9c3-88ee4219e811	d62ebb21a74bfe6d27089020c012f0485b01cee7ac2a62f9cf2898023788c1a0	2025-10-11 12:07:55.111149+00	20251002030304_add_alert_history	\N	\N	2025-10-11 12:07:55.057642+00	1
+d3246ac9-e524-4ca2-aa33-b99f6344d492	c52aeec6f10e1008a2684a58ead83b6fde907f382a4b4dff12f786e56576065c	2025-10-11 12:07:55.172127+00	20251006033542_add_backup_feature	\N	\N	2025-10-11 12:07:55.115177+00	1
+b5f31adb-bf73-44b1-9187-f6df54de9a45	832894d3ca4a4d59108162c05ee9b41b7c0f7febbfe263c6dbaaf6c31d51cedd	2025-10-11 12:07:55.308355+00	20251006084450_add_slave_node_feature	\N	\N	2025-10-11 12:07:55.177254+00	1
+5b768148-e839-473a-bd09-0b4f2685ef3a	72bb704fa65ff06af156dab94e86bf9afd17b49da905306c56772c331609c249	2025-10-11 12:07:55.353823+00	20251006092848_add_system_config_and_node_mode	\N	\N	2025-10-11 12:07:55.312066+00	1
+b02ac5d6-7319-442d-b5f4-fb31da71bf1e	3e93e0b05e4852855cd3ed3f8cf8a354295b2167381489a76ff4c541ab774adf	2025-10-11 12:07:55.370282+00	20251007145737_make_activity_log_user_id_optional	\N	\N	2025-10-11 12:07:55.358067+00	1
+f51f6d88-ca4d-430c-9010-0e5c6969a02e	56ffe8075275105c06c497b4c19c225f8da03eeedae6db084d54ebd3b8039c64	2025-10-11 12:07:55.390059+00	20251008110124_add_first_login_flag	\N	\N	2025-10-11 12:07:55.378749+00	1
+89756359-e472-45e7-af9f-e01c84d7f647	122d743a0403e77ad7e0ed9447f5b8826f2fbdbc55612d936eff004dd13c2eec	2025-10-11 12:07:55.403705+00	20251009081000_add_real_ip_config	\N	\N	2025-10-11 12:07:55.394343+00	1
 \.
 
 
@@ -808,11 +929,11 @@ COPY public.acl_rules (id, name, type, "conditionField", "conditionOperator", "c
 --
 
 COPY public.activity_logs (id, "userId", action, type, ip, "userAgent", details, success, "timestamp") FROM stdin;
-cmgkb7a3f0006ivw2yqdjwc95	cmgkb79yd0000ivw2v2bh58zf	User logged in	login	192.168.1.100	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36	\N	t	2025-10-10 02:51:06.457
-cmgkb7a3f0007ivw28wrmkbiu	cmgkb79yd0000ivw2v2bh58zf	Updated domain configuration for api.example.com	config_change	192.168.1.100	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36	Modified SSL settings and upstream configuration	t	2025-10-10 01:51:06.457
-cmgkb7a3f0008ivw2zvmfy3fl	cmgkb79yd0000ivw2v2bh58zf	Failed login attempt	security	203.0.113.42	Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36	Invalid password	f	2025-10-09 03:51:06.457
-cmgkb7a3f0009ivw2gcrq2wqd	cmgkb79yd0000ivw2v2bh58zf	Created new ACL rule	user_action	192.168.1.100	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36	Added IP blacklist rule for 192.168.1.200	t	2025-10-08 03:51:06.457
-cmgkb7a3f000aivw206am45um	cmgkb79yd0000ivw2v2bh58zf	Changed account password	security	192.168.1.100	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36	\N	t	2025-10-07 03:51:06.457
+cmgm8e4zs0006tvmotw92i9sc	cmgm8e4v20000tvmoodz5kctq	User logged in	login	192.168.1.100	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36	\N	t	2025-10-11 11:07:59.943
+cmgm8e4zs0007tvmofllpb3cy	cmgm8e4v20000tvmoodz5kctq	Updated domain configuration for api.example.com	config_change	192.168.1.100	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36	Modified SSL settings and upstream configuration	t	2025-10-11 10:07:59.943
+cmgm8e4zs0008tvmombg9gvjn	cmgm8e4v20000tvmoodz5kctq	Failed login attempt	security	203.0.113.42	Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36	Invalid password	f	2025-10-10 12:07:59.943
+cmgm8e4zs0009tvmofeqeevad	cmgm8e4v20000tvmoodz5kctq	Created new ACL rule	user_action	192.168.1.100	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36	Added IP blacklist rule for 192.168.1.200	t	2025-10-09 12:07:59.943
+cmgm8e4zs000atvmok254tp51	cmgm8e4v20000tvmoodz5kctq	Changed account password	security	192.168.1.100	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36	\N	t	2025-10-08 12:07:59.943
 \.
 
 
@@ -893,16 +1014,16 @@ COPY public.load_balancer_configs (id, "domainId", algorithm, "healthCheckEnable
 --
 
 COPY public.modsec_crs_rules (id, "domainId", "ruleFile", name, category, description, enabled, paranoia, "createdAt", "updatedAt") FROM stdin;
-cmgkb7a3q000bivw2ume2zdzc	\N	REQUEST-942-APPLICATION-ATTACK-SQLI.conf	SQL Injection Protection	SQLi	Detects SQL injection attempts using OWASP CRS detection rules	t	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000civw2jsbz3vbr	\N	REQUEST-941-APPLICATION-ATTACK-XSS.conf	XSS Attack Prevention	XSS	Blocks cross-site scripting attacks	t	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000divw2oj7pc9d8	\N	REQUEST-932-APPLICATION-ATTACK-RCE.conf	RCE Detection	RCE	Remote code execution prevention	t	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000eivw2fzcnpuja	\N	REQUEST-930-APPLICATION-ATTACK-LFI.conf	LFI Protection	LFI	Local file inclusion prevention	f	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000fivw2vm7wtpku	\N	REQUEST-943-APPLICATION-ATTACK-SESSION-FIXATION.conf	Session Fixation	SESSION-FIXATION	Prevents session fixation attacks	t	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000givw2xhltzyjz	\N	REQUEST-933-APPLICATION-ATTACK-PHP.conf	PHP Attacks	PHP	PHP-specific attack prevention	t	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000hivw2c3dshtmw	\N	REQUEST-920-PROTOCOL-ENFORCEMENT.conf	Protocol Attacks	PROTOCOL-ATTACK	HTTP protocol attack prevention	t	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000iivw27gr2vxdy	\N	RESPONSE-950-DATA-LEAKAGES.conf	Data Leakage	DATA-LEAKAGES	Prevents sensitive data leakage	f	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000jivw2fxmqb4eu	\N	REQUEST-934-APPLICATION-ATTACK-GENERIC.conf	SSRF Protection	SSRF	Server-side request forgery prevention (part of generic attacks)	t	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
-cmgkb7a3q000kivw2f5u7e43t	\N	RESPONSE-955-WEB-SHELLS.conf	Web Shell Detection	WEB-SHELL	Detects web shell uploads	t	1	2025-10-10 03:51:06.47	2025-10-10 03:51:06.47
+cmgm8e502000btvmoh1euelm2	\N	REQUEST-942-APPLICATION-ATTACK-SQLI.conf	SQL Injection Protection	SQLi	Detects SQL injection attempts using OWASP CRS detection rules	t	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000ctvmogb9a4nhg	\N	REQUEST-941-APPLICATION-ATTACK-XSS.conf	XSS Attack Prevention	XSS	Blocks cross-site scripting attacks	t	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000dtvmo7nzpzo83	\N	REQUEST-932-APPLICATION-ATTACK-RCE.conf	RCE Detection	RCE	Remote code execution prevention	t	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000etvmoohe2xu6j	\N	REQUEST-930-APPLICATION-ATTACK-LFI.conf	LFI Protection	LFI	Local file inclusion prevention	f	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000ftvmobbfoicax	\N	REQUEST-943-APPLICATION-ATTACK-SESSION-FIXATION.conf	Session Fixation	SESSION-FIXATION	Prevents session fixation attacks	t	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000gtvmo27w5kl8c	\N	REQUEST-933-APPLICATION-ATTACK-PHP.conf	PHP Attacks	PHP	PHP-specific attack prevention	t	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000htvmowpp2uw8o	\N	REQUEST-920-PROTOCOL-ENFORCEMENT.conf	Protocol Attacks	PROTOCOL-ATTACK	HTTP protocol attack prevention	t	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000itvmoga9ux6tq	\N	RESPONSE-950-DATA-LEAKAGES.conf	Data Leakage	DATA-LEAKAGES	Prevents sensitive data leakage	f	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000jtvmoac8l9op2	\N	REQUEST-934-APPLICATION-ATTACK-GENERIC.conf	SSRF Protection	SSRF	Server-side request forgery prevention (part of generic attacks)	t	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
+cmgm8e502000ktvmojwm28h80	\N	RESPONSE-955-WEB-SHELLS.conf	Web Shell Detection	WEB-SHELL	Detects web shell uploads	t	1	2025-10-11 12:07:59.954	2025-10-11 12:07:59.954
 \.
 
 
@@ -915,10 +1036,34 @@ COPY public.modsec_rules (id, "domainId", name, category, "ruleContent", enabled
 
 
 --
+-- Data for Name: network_load_balancers; Type: TABLE DATA; Schema: public; Owner: nginx_love_user
+--
+
+COPY public.network_load_balancers (id, name, description, port, protocol, algorithm, status, enabled, "proxyTimeout", "proxyConnectTimeout", "proxyNextUpstream", "proxyNextUpstreamTimeout", "proxyNextUpstreamTries", "healthCheckEnabled", "healthCheckInterval", "healthCheckTimeout", "healthCheckRises", "healthCheckFalls", "createdAt", "updatedAt") FROM stdin;
+\.
+
+
+--
 -- Data for Name: nginx_configs; Type: TABLE DATA; Schema: public; Owner: nginx_love_user
 --
 
 COPY public.nginx_configs (id, "configType", name, content, enabled, "createdAt", "updatedAt") FROM stdin;
+\.
+
+
+--
+-- Data for Name: nlb_health_checks; Type: TABLE DATA; Schema: public; Owner: nginx_love_user
+--
+
+COPY public.nlb_health_checks (id, "nlbId", "upstreamHost", "upstreamPort", status, "responseTime", error, "checkedAt") FROM stdin;
+\.
+
+
+--
+-- Data for Name: nlb_upstreams; Type: TABLE DATA; Schema: public; Owner: nginx_love_user
+--
+
+COPY public.nlb_upstreams (id, "nlbId", host, port, weight, "maxFails", "failTimeout", "maxConns", backup, down, status, "lastCheck", "lastError", "responseTime", "createdAt", "updatedAt") FROM stdin;
 \.
 
 
@@ -999,9 +1144,9 @@ COPY public.upstreams (id, "domainId", host, port, weight, "maxFails", "failTime
 --
 
 COPY public.user_profiles (id, "userId", bio, location, website, "createdAt", "updatedAt") FROM stdin;
-cmgkb79ye0001ivw2iix0n6tw	cmgkb79yd0000ivw2v2bh58zf	System administrator with full access	\N	\N	2025-10-10 03:51:06.278	2025-10-10 03:51:06.278
-cmgkb7a0u0003ivw2ikjyecag	cmgkb7a0u0002ivw274ecw7rv	System operator	\N	\N	2025-10-10 03:51:06.367	2025-10-10 03:51:06.367
-cmgkb7a350005ivw2aj6a168v	cmgkb7a350004ivw2gttu2bbg	Read-only access user	\N	\N	2025-10-10 03:51:06.449	2025-10-10 03:51:06.449
+cmgm8e4v20001tvmo3ddqo2kc	cmgm8e4v20000tvmoodz5kctq	System administrator with full access	\N	\N	2025-10-11 12:07:59.774	2025-10-11 12:07:59.774
+cmgm8e4xe0003tvmo7l2bvsqu	cmgm8e4xe0002tvmozb7qenyr	System operator	\N	\N	2025-10-11 12:07:59.859	2025-10-11 12:07:59.859
+cmgm8e4zk0005tvmojccpo2yp	cmgm8e4zk0004tvmo4g28yzu3	Read-only access user	\N	\N	2025-10-11 12:07:59.936	2025-10-11 12:07:59.936
 \.
 
 
@@ -1018,9 +1163,9 @@ COPY public.user_sessions (id, "userId", "sessionId", ip, "userAgent", device, l
 --
 
 COPY public.users (id, username, email, password, "fullName", role, status, avatar, phone, timezone, language, "createdAt", "updatedAt", "lastLogin", "isFirstLogin") FROM stdin;
-cmgkb79yd0000ivw2v2bh58zf	admin	admin@example.com	$2b$10$hLKGJe685RHoCK/MGpUc9OJd//7DHZgJT9mNUWND.oMZHkclTcCWq	System Administrator	admin	active	https://api.dicebear.com/7.x/avataaars/svg?seed=admin	+84 123 456 789	Asia/Ho_Chi_Minh	vi	2025-10-10 03:51:06.278	2025-10-10 03:51:06.278	2025-10-10 03:51:06.275	t
-cmgkb7a0u0002ivw274ecw7rv	operator	operator@example.com	$2b$10$4dkgEFEkVmxXvM3dOMIeOuTZft.PTYi0p9DrMIaTWb7Xy/bVzQg/W	System Operator	moderator	inactive	https://api.dicebear.com/7.x/avataaars/svg?seed=operator	+84 987 654 321	Asia/Ho_Chi_Minh	en	2025-10-10 03:51:06.367	2025-10-10 03:51:06.367	2025-10-09 03:51:06.365	t
-cmgkb7a350004ivw2gttu2bbg	viewer	viewer@example.com	$2b$10$PKH249jI0.kUrN6dVbUt3.b61G4fhpTkqAIEfS4A2whEkdjaNGdiG	Read Only User	viewer	inactive	https://api.dicebear.com/7.x/avataaars/svg?seed=viewer	\N	Asia/Singapore	en	2025-10-10 03:51:06.449	2025-10-10 03:51:06.449	2025-10-08 03:51:06.448	t
+cmgm8e4v20000tvmoodz5kctq	admin	admin@example.com	$2b$10$Zr8Iuc9glyfb9j1Cj6ceZ.Et3ZePHcMaY..aBky/iFYffK/wFMLK2	System Administrator	admin	active	https://api.dicebear.com/7.x/avataaars/svg?seed=admin	+84 123 456 789	Asia/Ho_Chi_Minh	vi	2025-10-11 12:07:59.774	2025-10-11 12:07:59.774	2025-10-11 12:07:59.772	t
+cmgm8e4xe0002tvmozb7qenyr	operator	operator@example.com	$2b$10$WqQOS5IlaY5mFBlxig0FwO6GlNCCAZUsCdchPmtWP4K7NVU90LfnG	System Operator	moderator	inactive	https://api.dicebear.com/7.x/avataaars/svg?seed=operator	+84 987 654 321	Asia/Ho_Chi_Minh	en	2025-10-11 12:07:59.859	2025-10-11 12:07:59.859	2025-10-10 12:07:59.857	t
+cmgm8e4zk0004tvmo4g28yzu3	viewer	viewer@example.com	$2b$10$cUWnQPfuw9G7maWXDutx..IL9ErZgpezK4WRS5iwiU4GFW98uZmty	Read Only User	viewer	inactive	https://api.dicebear.com/7.x/avataaars/svg?seed=viewer	\N	Asia/Singapore	en	2025-10-11 12:07:59.936	2025-10-11 12:07:59.936	2025-10-09 12:07:59.934	t
 \.
 
 
@@ -1144,11 +1289,35 @@ ALTER TABLE ONLY public.modsec_rules
 
 
 --
+-- Name: network_load_balancers network_load_balancers_pkey; Type: CONSTRAINT; Schema: public; Owner: nginx_love_user
+--
+
+ALTER TABLE ONLY public.network_load_balancers
+    ADD CONSTRAINT network_load_balancers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: nginx_configs nginx_configs_pkey; Type: CONSTRAINT; Schema: public; Owner: nginx_love_user
 --
 
 ALTER TABLE ONLY public.nginx_configs
     ADD CONSTRAINT nginx_configs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: nlb_health_checks nlb_health_checks_pkey; Type: CONSTRAINT; Schema: public; Owner: nginx_love_user
+--
+
+ALTER TABLE ONLY public.nlb_health_checks
+    ADD CONSTRAINT nlb_health_checks_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: nlb_upstreams nlb_upstreams_pkey; Type: CONSTRAINT; Schema: public; Owner: nginx_love_user
+--
+
+ALTER TABLE ONLY public.nlb_upstreams
+    ADD CONSTRAINT nlb_upstreams_pkey PRIMARY KEY (id);
 
 
 --
@@ -1402,10 +1571,59 @@ CREATE INDEX "modsec_rules_domainId_idx" ON public.modsec_rules USING btree ("do
 
 
 --
+-- Name: network_load_balancers_name_key; Type: INDEX; Schema: public; Owner: nginx_love_user
+--
+
+CREATE UNIQUE INDEX network_load_balancers_name_key ON public.network_load_balancers USING btree (name);
+
+
+--
+-- Name: network_load_balancers_port_idx; Type: INDEX; Schema: public; Owner: nginx_love_user
+--
+
+CREATE INDEX network_load_balancers_port_idx ON public.network_load_balancers USING btree (port);
+
+
+--
+-- Name: network_load_balancers_status_idx; Type: INDEX; Schema: public; Owner: nginx_love_user
+--
+
+CREATE INDEX network_load_balancers_status_idx ON public.network_load_balancers USING btree (status);
+
+
+--
 -- Name: nginx_configs_configType_idx; Type: INDEX; Schema: public; Owner: nginx_love_user
 --
 
 CREATE INDEX "nginx_configs_configType_idx" ON public.nginx_configs USING btree ("configType");
+
+
+--
+-- Name: nlb_health_checks_nlbId_checkedAt_idx; Type: INDEX; Schema: public; Owner: nginx_love_user
+--
+
+CREATE INDEX "nlb_health_checks_nlbId_checkedAt_idx" ON public.nlb_health_checks USING btree ("nlbId", "checkedAt");
+
+
+--
+-- Name: nlb_health_checks_upstreamHost_upstreamPort_idx; Type: INDEX; Schema: public; Owner: nginx_love_user
+--
+
+CREATE INDEX "nlb_health_checks_upstreamHost_upstreamPort_idx" ON public.nlb_health_checks USING btree ("upstreamHost", "upstreamPort");
+
+
+--
+-- Name: nlb_upstreams_nlbId_idx; Type: INDEX; Schema: public; Owner: nginx_love_user
+--
+
+CREATE INDEX "nlb_upstreams_nlbId_idx" ON public.nlb_upstreams USING btree ("nlbId");
+
+
+--
+-- Name: nlb_upstreams_status_idx; Type: INDEX; Schema: public; Owner: nginx_love_user
+--
+
+CREATE INDEX nlb_upstreams_status_idx ON public.nlb_upstreams USING btree (status);
 
 
 --
@@ -1612,6 +1830,22 @@ ALTER TABLE ONLY public.modsec_rules
 
 
 --
+-- Name: nlb_health_checks nlb_health_checks_nlbId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: nginx_love_user
+--
+
+ALTER TABLE ONLY public.nlb_health_checks
+    ADD CONSTRAINT "nlb_health_checks_nlbId_fkey" FOREIGN KEY ("nlbId") REFERENCES public.network_load_balancers(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: nlb_upstreams nlb_upstreams_nlbId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: nginx_love_user
+--
+
+ALTER TABLE ONLY public.nlb_upstreams
+    ADD CONSTRAINT "nlb_upstreams_nlbId_fkey" FOREIGN KEY ("nlbId") REFERENCES public.network_load_balancers(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
 -- Name: refresh_tokens refresh_tokens_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: nginx_love_user
 --
 
@@ -1671,5 +1905,5 @@ ALTER TABLE ONLY public.user_sessions
 -- PostgreSQL database dump complete
 --
 
-\unrestrict YvxuzPHp5BbUt2Tk0I7PgEj4k0vX1B5HV6Iyi86RE1sb8eXISEIGef4a8kLRWP9
+\unrestrict D9RqwATSuX8K9jCoc1z48HRaclEaPRyIbprgO4mmn2EDCcSqBtzOROxAKg8lbT1
 

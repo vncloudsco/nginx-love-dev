@@ -301,3 +301,129 @@ export interface SystemConfig {
   createdAt: string;
   updatedAt: string;
 }
+
+// Network Load Balancer Types
+export interface NLBUpstream {
+  id?: string;
+  host: string;
+  port: number;
+  weight: number;
+  maxFails: number;
+  failTimeout: number;
+  maxConns: number;
+  backup: boolean;
+  down: boolean;
+  status?: 'up' | 'down' | 'checking';
+  lastCheck?: string;
+  lastError?: string | null;
+  responseTime?: number | null;
+}
+
+export interface NetworkLoadBalancer {
+  id: string;
+  name: string;
+  description?: string | null;
+  port: number;
+  protocol: 'tcp' | 'udp' | 'tcp_udp';
+  algorithm: 'round_robin' | 'least_conn' | 'ip_hash' | 'hash';
+  status: 'active' | 'inactive' | 'error';
+  enabled: boolean;
+  
+  // Advanced settings
+  proxyTimeout: number;
+  proxyConnectTimeout: number;
+  proxyNextUpstream: boolean;
+  proxyNextUpstreamTimeout: number;
+  proxyNextUpstreamTries: number;
+  
+  // Health check settings
+  healthCheckEnabled: boolean;
+  healthCheckInterval: number;
+  healthCheckTimeout: number;
+  healthCheckRises: number;
+  healthCheckFalls: number;
+  
+  // Relations
+  upstreams: NLBUpstream[];
+  healthChecks?: NLBHealthCheck[];
+  
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NLBHealthCheck {
+  id: string;
+  nlbId: string;
+  upstreamHost: string;
+  upstreamPort: number;
+  status: 'up' | 'down' | 'checking';
+  responseTime?: number | null;
+  error?: string | null;
+  checkedAt: string;
+}
+
+export interface CreateNLBInput {
+  name: string;
+  description?: string;
+  port: number;
+  protocol: 'tcp' | 'udp' | 'tcp_udp';
+  algorithm?: 'round_robin' | 'least_conn' | 'ip_hash' | 'hash';
+  upstreams: Omit<NLBUpstream, 'id' | 'status' | 'lastCheck' | 'lastError' | 'responseTime'>[];
+  
+  // Advanced settings
+  proxyTimeout?: number;
+  proxyConnectTimeout?: number;
+  proxyNextUpstream?: boolean;
+  proxyNextUpstreamTimeout?: number;
+  proxyNextUpstreamTries?: number;
+  
+  // Health check settings
+  healthCheckEnabled?: boolean;
+  healthCheckInterval?: number;
+  healthCheckTimeout?: number;
+  healthCheckRises?: number;
+  healthCheckFalls?: number;
+}
+
+export interface UpdateNLBInput {
+  name?: string;
+  description?: string;
+  port?: number;
+  protocol?: 'tcp' | 'udp' | 'tcp_udp';
+  algorithm?: 'round_robin' | 'least_conn' | 'ip_hash' | 'hash';
+  status?: 'active' | 'inactive' | 'error';
+  enabled?: boolean;
+  upstreams?: Omit<NLBUpstream, 'id' | 'status' | 'lastCheck' | 'lastError' | 'responseTime'>[];
+  
+  // Advanced settings
+  proxyTimeout?: number;
+  proxyConnectTimeout?: number;
+  proxyNextUpstream?: boolean;
+  proxyNextUpstreamTimeout?: number;
+  proxyNextUpstreamTries?: number;
+  
+  // Health check settings
+  healthCheckEnabled?: boolean;
+  healthCheckInterval?: number;
+  healthCheckTimeout?: number;
+  healthCheckRises?: number;
+  healthCheckFalls?: number;
+}
+
+export interface NLBStats {
+  totalNLBs: number;
+  activeNLBs: number;
+  inactiveNLBs: number;
+  totalUpstreams: number;
+  healthyUpstreams: number;
+  unhealthyUpstreams: number;
+}
+
+export interface HealthCheckResult {
+  upstreamHost: string;
+  upstreamPort: number;
+  status: 'up' | 'down' | 'checking';
+  responseTime?: number;
+  error?: string;
+}
+

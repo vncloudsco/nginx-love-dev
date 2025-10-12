@@ -632,3 +632,112 @@ model ConfigVersion {
   @@index([createdAt])
   @@map("config_versions")
 }
+
+// Network Load Balancer Models
+
+enum NLBStatus {
+  active
+  inactive
+  error
+}
+
+enum NLBProtocol {
+  tcp
+  udp
+  tcp_udp // Both TCP and UDP
+}
+
+enum NLBAlgorithm {
+  round_robin
+  least_conn
+  ip_hash
+  hash
+}
+
+enum NLBUpstreamStatus {
+  up
+  down
+  checking
+}
+
+model NetworkLoadBalancer {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String?     @db.Text
+  port        Int // Listen port (must be >= 10000)
+  protocol    NLBProtocol @default(tcp)
+  algorithm   NLBAlgorithm @default(round_robin)
+  status      NLBStatus   @default(inactive)
+  enabled     Boolean     @default(true)
+
+  // Advanced settings
+  proxyTimeout        Int @default(3) // seconds
+  proxyConnectTimeout Int @default(1) // seconds
+  proxyNextUpstream   Boolean @default(true)
+  proxyNextUpstreamTimeout Int @default(0) // seconds, 0 = disabled
+  proxyNextUpstreamTries   Int @default(0) // 0 = unlimited
+  
+  // Health check settings
+  healthCheckEnabled  Boolean @default(true)
+  healthCheckInterval Int     @default(10) // seconds
+  healthCheckTimeout  Int     @default(5) // seconds
+  healthCheckRises    Int     @default(2) // Number of successful checks to mark as up
+  healthCheckFalls    Int     @default(3) // Number of failed checks to mark as down
+
+  // Relations
+  upstreams    NLBUpstream[]
+  healthChecks NLBHealthCheck[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([port])
+  @@map("network_load_balancers")
+}
+
+model NLBUpstream {
+  id    String @id @default(cuid())
+  nlbId String
+  nlb   NetworkLoadBalancer @relation(fields: [nlbId], references: [id], onDelete: Cascade)
+
+  host        String
+  port        Int
+  weight      Int               @default(1) // 1-100
+  maxFails    Int               @default(3)
+  failTimeout Int               @default(10) // seconds
+  maxConns    Int               @default(0) // 0 = unlimited
+  backup      Boolean           @default(false)
+  down        Boolean           @default(false) // Manually mark as down
+  status      NLBUpstreamStatus @default(checking)
+
+  // Metadata
+  lastCheck   DateTime?
+  lastError   String?  @db.Text
+  responseTime Float?  // milliseconds
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nlbId])
+  @@index([status])
+  @@map("nlb_upstreams")
+}
+
+model NLBHealthCheck {
+  id    String @id @default(cuid())
+  nlbId String
+  nlb   NetworkLoadBalancer @relation(fields: [nlbId], references: [id], onDelete: Cascade)
+
+  upstreamHost String
+  upstreamPort Int
+  status       NLBUpstreamStatus
+  responseTime Float? // milliseconds
+  error        String? @db.Text
+
+  checkedAt DateTime @default(now())
+
+  @@index([nlbId, checkedAt])
+  @@index([upstreamHost, upstreamPort])
+  @@map("nlb_health_checks")
+}
