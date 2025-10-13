@@ -47,4 +47,3 @@ landing/*
 .seeded
 *.md
 /docs/*
-/apps/application/src-tauri/target/*
