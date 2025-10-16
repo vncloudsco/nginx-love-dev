@@ -601,7 +601,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 
 ## 📄 License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **License** - see the [LICENSE](LICENSE) file for details.
 
 ## 👥 Support & Community
 

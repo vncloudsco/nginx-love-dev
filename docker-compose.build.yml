@@ -132,7 +132,6 @@ volumes:
     driver: local
   nginx_modules:
     driver: local
-
 networks:
   nginx-love-network:
     driver: bridge

@@ -79,6 +79,26 @@ export class DomainsService {
   }
 
   /**
+   * Regenerate nginx configuration for a domain
+   * Used when domain-related configurations change (e.g., access lists)
+   */
+  async regenerateConfig(domainId: string): Promise<void> {
+    // Get domain with all relations including access lists
+    const domain = await domainsRepository.findById(domainId);
+    if (!domain) {
+      throw new Error('Domain not found');
+    }
+
+    // Regenerate nginx config
+    await nginxConfigService.generateConfig(domain);
+
+    // Auto-reload nginx
+    await nginxReloadService.autoReload(true);
+
+    logger.info(`Regenerated nginx config for domain ${domain.name}`);
+  }
+
+  /**
    * Update domain
    */
   async updateDomain(

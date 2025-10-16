@@ -1,9 +1,13 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import logger from '../../../utils/logger';
 import { PATHS } from '../../../shared/constants/paths.constants';
 import { DomainWithRelations } from '../domains.types';
 import { cloudflareIpsService } from './cloudflare-ips.service';
+
+const execAsync = promisify(exec);
 
 /**
  * Service for generating Nginx configuration files
@@ -13,11 +17,34 @@ export class NginxConfigService {
   private readonly sitesEnabled = PATHS.NGINX.SITES_ENABLED;
 
   /**
+   * Validate nginx configuration syntax
+   * @returns {Promise<{valid: boolean, error?: string}>}
+   */
+  async validateNginxConfig(): Promise<{ valid: boolean; error?: string }> {
+    try {
+      const { stdout, stderr } = await execAsync('nginx -t 2>&1');
+      const output = stdout + stderr;
+      
+      if (output.includes('syntax is ok') && output.includes('test is successful')) {
+        logger.info('Nginx configuration validation passed');
+        return { valid: true };
+      }
+      
+      logger.error('Nginx configuration validation failed:', output);
+      return { valid: false, error: output };
+    } catch (error: any) {
+      logger.error('Nginx configuration validation error:', error.message);
+      return { valid: false, error: error.message };
+    }
+  }
+
+  /**
    * Generate complete Nginx configuration for a domain
    */
   async generateConfig(domain: DomainWithRelations): Promise<void> {
     const configPath = path.join(this.sitesAvailable, `${domain.name}.conf`);
     const enabledPath = path.join(this.sitesEnabled, `${domain.name}.conf`);
+    const backupPath = path.join(this.sitesAvailable, `${domain.name}.conf.backup`);
 
     // Debug logging
     logger.info(`Generating nginx config for ${domain.name}:`);
@@ -39,6 +66,15 @@ export class NginxConfigService {
     try {
       await fs.mkdir(this.sitesAvailable, { recursive: true });
       await fs.mkdir(this.sitesEnabled, { recursive: true });
+
+      // Backup existing config if it exists
+      try {
+        await fs.copyFile(configPath, backupPath);
+        logger.info(`Backed up existing config to ${backupPath}`);
+      } catch (e) {
+        // No existing config to backup
+      }
+
       await fs.writeFile(configPath, fullConfig);
 
       // Create symlink if domain is active
@@ -51,9 +87,32 @@ export class NginxConfigService {
         await fs.symlink(configPath, enabledPath);
       }
 
-      logger.info(`Nginx configuration generated for ${domain.name}`);
+      // Validate nginx configuration
+      const validation = await this.validateNginxConfig();
+      
+      if (!validation.valid) {
+        // Restore backup if validation fails
+        logger.error(`Nginx config validation failed for ${domain.name}, restoring backup`);
+        try {
+          await fs.copyFile(backupPath, configPath);
+          logger.info('Backup restored successfully');
+        } catch (restoreError) {
+          logger.error('Failed to restore backup:', restoreError);
+        }
+        
+        throw new Error(`Invalid nginx configuration: ${validation.error}`);
+      }
+
+      logger.info(`Nginx configuration generated and validated for ${domain.name}`);
+      
+      // Clean up backup after successful validation
+      try {
+        await fs.unlink(backupPath);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
     } catch (error) {
-      logger.error(`Failed to write nginx config for ${domain.name}:`, error);
+      logger.error(`Failed to generate nginx config for ${domain.name}:`, error);
       throw error;
     }
   }
@@ -80,7 +139,7 @@ map $http_upgrade $connection_upgrade {
     const upstreamName = domain.name.replace(/\./g, '_');
     const algorithm = domain.loadBalancer?.algorithm || 'round_robin';
 
-    const algorithmDirectives = [];
+    const algorithmDirectives: string[] = [];
     if (algorithm === 'least_conn') {
       algorithmDirectives.push('least_conn;');
     } else if (algorithm === 'ip_hash') {
@@ -94,7 +153,7 @@ map $http_upgrade $connection_upgrade {
     // Calculate keepalive connections: 10 connections per backend
     const keepaliveConnections = domain.upstreams.length * 10;
 
-    return `
+    let upstreamBlocks = `
 upstream ${upstreamName}_backend {
     ${algorithmDirectives.join('\n    ')}
     ${algorithmDirectives.length > 0 ? '\n    ' : ''}${servers}
@@ -103,6 +162,54 @@ upstream ${upstreamName}_backend {
     keepalive ${keepaliveConnections};
 }
 `;
+
+    // Generate upstream blocks for custom locations
+    if (domain.customLocations && typeof domain.customLocations === 'object') {
+      try {
+        const locations = Array.isArray(domain.customLocations) 
+          ? domain.customLocations 
+          : (domain.customLocations as any).locations || [];
+
+        locations.forEach((loc: any) => {
+          // Skip if config already contains proxy_pass or grpc_pass (user manages their own upstream)
+          const hasProxyDirective = loc.config && (
+            loc.config.includes('proxy_pass') || 
+            loc.config.includes('grpc_pass')
+          );
+          
+          if (hasProxyDirective) {
+            return; // Skip upstream generation
+          }
+
+          // Only generate upstream if we have valid upstreams with non-empty hosts
+          if (loc.upstreams && Array.isArray(loc.upstreams) && loc.upstreams.length > 0) {
+            const validUpstreams = loc.upstreams.filter((u: any) => u.host && u.host.trim() !== '');
+            
+            if (validUpstreams.length === 0) {
+              return; // Skip if no valid upstreams
+            }
+
+            const locationUpstreamName = `${domain.name.replace(/\./g, '_')}_${loc.path.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            const locationServers = validUpstreams.map((u: any) =>
+              `server ${u.host}:${u.port} weight=${u.weight || 1} max_fails=${u.maxFails || 3} fail_timeout=${u.failTimeout || 10}s;`
+            ).join('\n    ');
+
+            upstreamBlocks += `
+upstream ${locationUpstreamName}_backend {
+    ${algorithmDirectives.join('\n    ')}
+    ${algorithmDirectives.length > 0 ? '\n    ' : ''}${locationServers}
+    
+    keepalive ${validUpstreams.length * 10};
+}
+`;
+          }
+        });
+      } catch (error) {
+        logger.error('Failed to generate custom location upstreams:', error);
+      }
+    }
+
+    return upstreamBlocks;
   }
 
   /**
@@ -136,6 +243,9 @@ ${realIpBlock}
 `;
     }
 
+    // Generate Access Lists block
+    const accessListsBlock = this.generateAccessListsBlock(domain);
+
     // HTTP server with full proxy configuration
     return `
 server {
@@ -143,6 +253,7 @@ server {
     server_name ${domain.name};
 
 ${realIpBlock}
+${accessListsBlock}
     # Include ACL rules (IP whitelist/blacklist)
     include /etc/nginx/conf.d/acl-rules.conf;
 
@@ -186,13 +297,28 @@ ${realIpBlock}
 
     // Generate Real IP block
     const realIpBlock = await this.generateRealIpBlock(domain);
+    
+    // Generate HSTS header if enabled
+    const hstsHeader = domain.hstsEnabled 
+      ? 'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;'
+      : 'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;';
+    
+    // HTTP/2 support (enabled by default, can be disabled)
+    const http2Support = domain.http2Enabled !== false ? ' http2' : '';
+    
+    // Generate custom locations if configured
+    const customLocations = this.generateCustomLocations(domain);
+    
+    // Generate Access Lists block
+    const accessListsBlock = this.generateAccessListsBlock(domain);
 
     return `
 server {
-    listen 443 ssl http2;
+    listen 443 ssl${http2Support};
     server_name ${domain.name};
 
 ${realIpBlock}
+${accessListsBlock}
     # Include ACL rules (IP whitelist/blacklist)
     include /etc/nginx/conf.d/acl-rules.conf;
 
@@ -211,7 +337,7 @@ ${realIpBlock}
     ssl_stapling_verify on;
 
     # Security Headers
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    ${hstsHeader}
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
@@ -221,13 +347,9 @@ ${realIpBlock}
     access_log /var/log/nginx/${domain.name}_ssl_access.log main;
     error_log /var/log/nginx/${domain.name}_ssl_error.log warn;
 
+${customLocations}
     location / {
-        ${this.generateProxyHeaders(domain)}
-        proxy_pass ${upstreamProtocol}://${upstreamName}_backend;
-
-        ${this.generateHttpsBackendSettings(domain)}
-
-        ${this.generateHealthCheckSettings(domain)}
+        ${domain.grpcEnabled ? this.generateGrpcLocationBlock(domain, upstreamName) : this.generateProxyLocationBlock(domain, upstreamName, upstreamProtocol)}
     }
 
     location /nginx_health {
@@ -281,6 +403,30 @@ ${realIpBlock}
   }
 
   /**
+   * Generate Access Lists includes for a domain
+   */
+  private generateAccessListsBlock(domain: DomainWithRelations): string {
+    // Check if domain has access lists
+    if (!domain.accessLists || domain.accessLists.length === 0) {
+      return '';
+    }
+
+    const lines: string[] = [];
+    lines.push('    # Access Lists Configuration');
+
+    // Include each enabled access list
+    domain.accessLists
+      .filter(al => al.enabled && al.accessList.enabled)
+      .forEach(al => {
+        const configFile = `/etc/nginx/access-lists/${al.accessList.name}.conf`;
+        lines.push(`    include ${configFile};`);
+      });
+
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  /**
    * Generate proxy headers for passing client information to backend
    * Includes WebSocket support by default
    */
@@ -323,7 +469,7 @@ ${realIpBlock}
   }
 
   /**
-   * Generate health check settings
+   * Generate health check settings for HTTP/HTTPS proxy
    */
   private generateHealthCheckSettings(domain: DomainWithRelations): string {
     if (!domain.loadBalancer?.healthCheckEnabled) {
@@ -336,6 +482,228 @@ ${realIpBlock}
         proxy_next_upstream_tries 3;
         proxy_next_upstream_timeout ${domain.loadBalancer.healthCheckTimeout}s;
         `;
+  }
+
+  /**
+   * Generate health check settings for gRPC
+   */
+  private generateGrpcHealthCheckSettings(domain: DomainWithRelations): string {
+    if (!domain.loadBalancer?.healthCheckEnabled) {
+      return '';
+    }
+
+    return `
+        # gRPC Health check settings
+        grpc_next_upstream error timeout http_502 http_503 http_504;
+        grpc_next_upstream_tries 3;
+        grpc_next_upstream_timeout ${domain.loadBalancer.healthCheckTimeout}s;
+        `;
+  }
+
+  /**
+   * Generate proxy_pass directive
+   */
+  private generateProxyPass(domain: DomainWithRelations, upstreamName: string, protocol: string): string {
+    return `proxy_pass ${protocol}://${upstreamName}_backend;`;
+  }
+
+  /**
+   * Generate grpc_pass directive with proper scheme
+   * Note: Only grpc_pass directive exists. Use grpc:// or grpcs:// scheme for protocol
+   */
+  private generateGrpcPass(domain: DomainWithRelations, upstreamName: string): string {
+    const hasHttpsUpstream = domain.upstreams.some((u) => u.protocol === 'https');
+    const grpcScheme = hasHttpsUpstream ? 'grpcs://' : 'grpc://';
+    return `grpc_pass ${grpcScheme}${upstreamName}_backend;`;
+  }
+
+  /**
+   * Generate complete gRPC location block with SSL settings
+   */
+  private generateGrpcLocationBlock(domain: DomainWithRelations, upstreamName: string): string {
+    const hasHttpsUpstream = domain.upstreams.some((u) => u.protocol === 'https');
+    const grpcScheme = hasHttpsUpstream ? 'grpcs://' : 'grpc://';
+    
+    const shouldVerify = domain.upstreams.some(
+      (u) => u.protocol === 'https' && u.sslVerify
+    );
+
+    // gRPC SSL settings (if using HTTPS/TLS backend)
+    let sslSettings = '';
+    if (hasHttpsUpstream) {
+      sslSettings = `
+        # gRPC SSL Backend Settings
+        ${shouldVerify ? 'grpc_ssl_verify on;' : 'grpc_ssl_verify off;'}
+        grpc_ssl_server_name on;
+        grpc_ssl_name ${domain.name};
+        grpc_ssl_protocols TLSv1.2 TLSv1.3;`;
+    }
+
+    // gRPC timeout and error handling (equivalent to proxy_next_upstream)
+    // Note: grpc_next_upstream valid values: error, timeout, invalid_header, http_500, http_502, http_503, http_504, http_403, http_404, http_429, non_idempotent, off
+    let healthCheckSettings = '';
+    if (domain.loadBalancer?.healthCheckEnabled) {
+      healthCheckSettings = `
+        # gRPC error handling and failover
+        grpc_next_upstream error timeout http_502 http_503 http_504;
+        grpc_next_upstream_tries 3;
+        grpc_next_upstream_timeout ${domain.loadBalancer.healthCheckTimeout}s;`;
+    }
+
+    // gRPC timeouts (equivalent to proxy timeouts)
+    const timeoutSettings = `
+        # gRPC timeouts
+        grpc_connect_timeout 60s;
+        grpc_send_timeout 60s;
+        grpc_read_timeout 60s;`;
+
+    return `# gRPC Configuration
+        grpc_pass ${grpcScheme}${upstreamName}_backend;
+${sslSettings}
+${timeoutSettings}
+${healthCheckSettings}`;
+  }
+
+  /**
+   * Generate complete proxy location block with SSL settings
+   */
+  private generateProxyLocationBlock(domain: DomainWithRelations, upstreamName: string, protocol: string): string {
+    return `${this.generateProxyHeaders(domain)}
+        
+        # Proxy Configuration
+        proxy_pass ${protocol}://${upstreamName}_backend;
+
+        ${this.generateHttpsBackendSettings(domain)}
+
+        ${this.generateHealthCheckSettings(domain)}`;
+  }
+
+  /**
+   * Generate custom location blocks
+   */
+  private generateCustomLocations(domain: DomainWithRelations): string {
+    if (!domain.customLocations || typeof domain.customLocations !== 'object') {
+      return '';
+    }
+
+    try {
+      const locations = Array.isArray(domain.customLocations) 
+        ? domain.customLocations 
+        : (domain.customLocations as any).locations || [];
+
+      if (locations.length === 0) {
+        return '';
+      }
+
+      return locations.map((loc: any) => {
+        const { path: locPath, useUpstream, upstreamType, upstreams, config } = loc;
+        
+        // Case 1: User disabled upstream (useUpstream = false) - use custom config only
+        if (useUpstream === false) {
+          if (!config || config.trim() === '') {
+            logger.warn(`Custom location ${locPath} has no config and upstream disabled, skipping`);
+            return '';
+          }
+          
+          return `
+    location ${locPath} {
+        ${config}
+    }`;
+        }
+
+        // Case 2: User enabled upstream (useUpstream = true) - generate upstream-based config
+        if (useUpstream === true) {
+          // Validate that upstreams exist and have valid hosts
+          if (!upstreams || !Array.isArray(upstreams) || upstreams.length === 0) {
+            logger.warn(`Custom location ${locPath} has upstream enabled but no upstreams defined, skipping`);
+            return '';
+          }
+
+          const validUpstreams = upstreams.filter((u: any) => u.host && u.host.trim() !== '');
+          if (validUpstreams.length === 0) {
+            logger.warn(`Custom location ${locPath} has no valid upstream hosts, skipping`);
+            return '';
+          }
+
+          const locationUpstreamName = `${domain.name.replace(/\./g, '_')}_${locPath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          
+          // Determine directive based on type
+          // Important: Add trailing slash (/) to strip location path before proxying
+          let proxyDirective = '';
+          if (upstreamType === 'grpc_pass') {
+            proxyDirective = `grpc_pass grpc://${locationUpstreamName}_backend/;`;
+          } else if (upstreamType === 'grpcs_pass') {
+            proxyDirective = `grpc_pass grpcs://${locationUpstreamName}_backend/;`;
+          } else {
+            const hasHttpsUpstream = upstreams?.some((u: any) => u.protocol === 'https');
+            const protocol = hasHttpsUpstream ? 'https' : 'http';
+            proxyDirective = `proxy_pass ${protocol}://${locationUpstreamName}_backend/;`;
+          }
+
+          return `
+    location ${locPath} {
+        ${this.generateProxyHeaders(domain)}
+        ${proxyDirective}
+        ${config ? '\n        ' + config : ''}
+    }`;
+        }
+
+        // Case 3: Legacy - no useUpstream field (backward compatibility)
+        // Check if config already contains proxy_pass or grpc_pass
+        const hasProxyDirective = config && (
+          config.includes('proxy_pass') || 
+          config.includes('grpc_pass')
+        );
+
+        if (hasProxyDirective) {
+          return `
+    location ${locPath} {
+        ${config}
+    }`;
+        }
+
+        // Generate upstream-based config if upstreams exist
+        if (upstreams && Array.isArray(upstreams) && upstreams.length > 0) {
+          const validUpstreams = upstreams.filter((u: any) => u.host && u.host.trim() !== '');
+          if (validUpstreams.length > 0) {
+            const locationUpstreamName = `${domain.name.replace(/\./g, '_')}_${locPath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            
+            // Add trailing slash (/) to strip location path before proxying
+            let proxyDirective = '';
+            if (upstreamType === 'grpc_pass') {
+              proxyDirective = `grpc_pass grpc://${locationUpstreamName}_backend/;`;
+            } else if (upstreamType === 'grpcs_pass') {
+              proxyDirective = `grpc_pass grpcs://${locationUpstreamName}_backend/;`;
+            } else {
+              const hasHttpsUpstream = upstreams?.some((u: any) => u.protocol === 'https');
+              const protocol = hasHttpsUpstream ? 'https' : 'http';
+              proxyDirective = `proxy_pass ${protocol}://${locationUpstreamName}_backend/;`;
+            }
+
+            return `
+    location ${locPath} {
+        ${this.generateProxyHeaders(domain)}
+        ${proxyDirective}
+        ${config ? '\n        ' + config : ''}
+    }`;
+          }
+        }
+
+        // Fallback: just use config if provided
+        if (config && config.trim() !== '') {
+          return `
+    location ${locPath} {
+        ${config}
+    }`;
+        }
+
+        logger.warn(`Custom location ${locPath} has no valid configuration, skipping`);
+        return '';
+      }).filter((loc: string) => loc !== '').join('\n');
+    } catch (error) {
+      logger.error('Failed to generate custom locations:', error);
+      return '';
+    }
   }
 
   /**

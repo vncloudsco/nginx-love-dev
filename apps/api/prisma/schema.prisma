@@ -183,12 +183,19 @@ model Domain {
   realIpCloudflare Boolean  @default(false) // Use Cloudflare IP ranges
   realIpCustomCidrs String[] @default([])    // Custom CIDR ranges for set_real_ip_from
 
+  // Advanced Configuration
+  hstsEnabled      Boolean @default(false) // HTTP Strict Transport Security
+  http2Enabled     Boolean @default(true)  // Enable HTTP/2
+  grpcEnabled      Boolean @default(false) // Enable gRPC/gRPCs support
+  customLocations  Json?                   // Custom location blocks configuration
+
   // Relations
   upstreams      Upstream[]
   loadBalancer   LoadBalancerConfig?
   sslCertificate SSLCertificate?
   modsecCRSRules ModSecCRSRule[]
   modsecRules    ModSecRule[]
+  accessLists    AccessListDomain[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -452,6 +459,73 @@ model AclRule {
   updatedAt DateTime @updatedAt
 
   @@map("acl_rules")
+}
+
+// Access Lists Management Models
+
+enum AccessListType {
+  ip_whitelist
+  http_basic_auth
+  combined // Both IP and Basic Auth
+}
+
+model AccessList {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  description String?        @db.Text
+  type        AccessListType
+  enabled     Boolean        @default(true)
+
+  // IP Whitelist configuration
+  allowedIps String[] @default([]) // List of allowed IP addresses/CIDR
+
+  // HTTP Basic Auth configuration
+  authUsers AccessListAuthUser[]
+
+  // Relations to domains
+  domains AccessListDomain[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([enabled])
+  @@map("access_lists")
+}
+
+model AccessListAuthUser {
+  id           String     @id @default(cuid())
+  accessListId String
+  accessList   AccessList @relation(fields: [accessListId], references: [id], onDelete: Cascade)
+
+  username     String
+  passwordHash String // Plain text password - will be hashed by htpasswd tool with apr1/MD5 format
+  description  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accessListId, username])
+  @@index([accessListId])
+  @@map("access_list_auth_users")
+}
+
+model AccessListDomain {
+  id           String     @id @default(cuid())
+  accessListId String
+  accessList   AccessList @relation(fields: [accessListId], references: [id], onDelete: Cascade)
+  domainId     String
+  domain       Domain     @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  enabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accessListId, domainId])
+  @@index([accessListId])
+  @@index([domainId])
+  @@map("access_list_domains")
 }
 
 model PerformanceMetric {
