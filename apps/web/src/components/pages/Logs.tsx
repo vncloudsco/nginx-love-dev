@@ -73,7 +73,7 @@ import {
   useSuspenseLogs,
   useLogs
 } from "@/queries/logs.query-options";
-import { LogDetailsDialog } from "@/components/logs/LogDetailsDialog";
+import { LogDetailsDialog } from "@/components/logs/LogDetailsDialog.tsx";
 
 // Component for fast-loading statistics data
 const LogStatistics = () => {
