@@ -66,6 +66,7 @@ const menuGroups = [
     items: [
       { key: 'modsecurity', icon: Shield, path: '/modsecurity' },
       { key: 'acl', icon: UserCog, path: '/acl' },
+      { key: 'access-lists', icon: Lock, path: '/access-lists' },
     ]
   },
   {

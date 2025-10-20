@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y curl ca-certificates gnupg && \
 RUN npm install -g corepack && corepack enable && corepack prepare pnpm@8.15.0 --activate
 
 # Install OpenSSL and wget for Prisma and health checks
-RUN apt-get update && apt-get install -y openssl wget && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y openssl apache2-utils wget && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate

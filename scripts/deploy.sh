@@ -84,6 +84,15 @@ else
     fi
 fi
 
+if ! comannd -v htpasswd &> /dev/null; then
+    warn "htpasswd not found. Installing apache2-utils..."
+    apt-get install -y apache2-utils >> "$LOG_FILE" 2>&1 || error "Failed to install apache2-utils"
+    log "✓ htpasswd installed successfully"
+else
+    log "✓ htpasswd $(htpasswd -v 2>&1 | head -n1 | awk '{print $3}') detected"
+fi
+
+
 # Check npm (ensure it's installed)
 if ! command -v npm &> /dev/null; then
     warn "npm not found. Installing npm..."

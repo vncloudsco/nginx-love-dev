@@ -69,6 +69,15 @@ fi
 # Step 1: Check prerequisites
 log "Step 1/6: Checking prerequisites..."
 
+if ! comannd -v htpasswd &> /dev/null; then
+    warn "htpasswd not found. Installing apache2-utils..."
+    apt-get install -y apache2-utils >> "$LOG_FILE" 2>&1 || error "Failed to install apache2-utils"
+    log "✓ htpasswd installed successfully"
+else
+    log "✓ htpasswd $(htpasswd -v 2>&1 | head -n1 | awk '{print $3}') detected"
+fi
+
+
 # Check Node.js
 if ! command -v node &> /dev/null; then
     error "Node.js not found. Please install Node.js 18+ first."

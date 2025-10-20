@@ -8,9 +8,11 @@ services:
       POSTGRES_USER: ${DB_USER:-nginx_love_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-change_this_password}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      # Bind only to localhost for security (matches deploy.sh)
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Use consistent volume name with deploy.sh
+      - nginx-love-postgres-data:/var/lib/postgresql/data
     networks:
       - nginx-love-network
     healthcheck:
@@ -20,7 +22,7 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
+  nginx-love-postgres-data:
     driver: local
 
 networks:

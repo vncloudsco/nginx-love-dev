@@ -14,6 +14,7 @@ import {
   SSLCertificateFiles,
 } from './backup.types';
 import { CreateBackupScheduleDto, UpdateBackupScheduleDto } from './dto';
+import { backupSchedulerService } from './services/backup-scheduler.service';
 
 const execAsync = promisify(exec);
 
@@ -110,15 +111,25 @@ export class BackupService {
    * Create backup schedule
    */
   async createBackupSchedule(dto: CreateBackupScheduleDto, userId?: string) {
+    // Calculate nextRun from cron expression
+    let nextRun: Date | undefined;
+    try {
+      nextRun = backupSchedulerService.calculateNextRun(dto.schedule);
+    } catch (error) {
+      logger.warn('Failed to calculate nextRun for new schedule:', error);
+    }
+
     const newSchedule = await backupRepository.createSchedule({
       name: dto.name,
       schedule: dto.schedule,
       enabled: dto.enabled ?? true,
+      nextRun,
     });
 
     logger.info(`Backup schedule created: ${dto.name}`, {
       userId,
       scheduleId: newSchedule.id,
+      nextRun: nextRun?.toISOString(),
     });
 
     return newSchedule;
@@ -136,6 +147,15 @@ export class BackupService {
     if (dto.name) updateData.name = dto.name;
     if (dto.schedule) updateData.schedule = dto.schedule;
     if (dto.enabled !== undefined) updateData.enabled = dto.enabled;
+
+    // Recalculate nextRun if cron expression changed
+    if (dto.schedule) {
+      try {
+        updateData.nextRun = backupSchedulerService.calculateNextRun(dto.schedule);
+      } catch (error) {
+        logger.warn('Failed to calculate nextRun for updated schedule:', error);
+      }
+    }
 
     const updatedSchedule = await backupRepository.updateSchedule(id, updateData);
 
@@ -161,9 +181,20 @@ export class BackupService {
       throw new Error('Backup schedule not found');
     }
 
-    const updated = await backupRepository.updateSchedule(id, {
+    const updateData: any = {
       enabled: !schedule.enabled,
-    });
+    };
+
+    // If enabling, calculate nextRun
+    if (!schedule.enabled) {
+      try {
+        updateData.nextRun = backupSchedulerService.calculateNextRun(schedule.schedule);
+      } catch (error) {
+        logger.warn('Failed to calculate nextRun when enabling schedule:', error);
+      }
+    }
+
+    const updated = await backupRepository.updateSchedule(id, updateData);
 
     logger.info(`Backup schedule toggled: ${id} (enabled: ${updated.enabled})`, {
       userId,
@@ -1097,6 +1128,16 @@ export class BackupService {
     const backendCount = domain.upstreams?.length || 0;
     const keepaliveConnections = backendCount * 10;
 
+    // Generate WebSocket map block
+    const websocketMapBlock = `
+# WebSocket support - Map for connection upgrade
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+`;
+
     const upstreamBlock = `
 upstream ${domain.name.replace(/\./g, '_')}_backend {
     ${domain.loadBalancer?.algorithm === 'least_conn' ? 'least_conn;' : ''}
@@ -1141,6 +1182,14 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        
+        # WebSocket timeout settings
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
     }
 
     location /nginx_health {
@@ -1184,6 +1233,14 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        
+        # WebSocket timeout settings
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
     }
 
     location /nginx_health {
@@ -1195,7 +1252,7 @@ server {
 `;
     }
 
-    const fullConfig = upstreamBlock + httpServerBlock + httpsServerBlock;
+    const fullConfig = websocketMapBlock + upstreamBlock + httpServerBlock + httpsServerBlock;
 
     await fs.mkdir(BACKUP_CONSTANTS.NGINX_SITES_AVAILABLE, { recursive: true });
     await fs.mkdir(BACKUP_CONSTANTS.NGINX_SITES_ENABLED, { recursive: true });

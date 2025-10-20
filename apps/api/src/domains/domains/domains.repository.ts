@@ -104,6 +104,11 @@ export class DomainsRepository {
         loadBalancer: true,
         sslCertificate: true,
         modsecRules: true,
+        accessLists: {
+          include: {
+            accessList: true,
+          },
+        },
       },
     });
 
@@ -121,6 +126,11 @@ export class DomainsRepository {
         loadBalancer: true,
         sslCertificate: true,
         modsecRules: true,
+        accessLists: {
+          include: {
+            accessList: true,
+          },
+        },
       },
     });
 
@@ -139,6 +149,11 @@ export class DomainsRepository {
         realIpEnabled: input.realIpConfig?.realIpEnabled || false,
         realIpCloudflare: input.realIpConfig?.realIpCloudflare || false,
         realIpCustomCidrs: input.realIpConfig?.realIpCustomCidrs || [],
+        // Advanced configuration
+        hstsEnabled: input.advancedConfig?.hstsEnabled || false,
+        http2Enabled: input.advancedConfig?.http2Enabled !== undefined ? input.advancedConfig.http2Enabled : true,
+        grpcEnabled: input.advancedConfig?.grpcEnabled || false,
+        customLocations: input.advancedConfig?.customLocations ? JSON.parse(JSON.stringify(input.advancedConfig.customLocations)) : null,
         upstreams: {
           create: input.upstreams.map((u: CreateUpstreamData) => ({
             host: u.host,
@@ -226,6 +241,23 @@ export class DomainsRepository {
           input.realIpConfig?.realIpCustomCidrs !== undefined
             ? input.realIpConfig.realIpCustomCidrs
             : currentDomain.realIpCustomCidrs,
+        // Advanced configuration
+        hstsEnabled:
+          input.advancedConfig?.hstsEnabled !== undefined
+            ? input.advancedConfig.hstsEnabled
+            : currentDomain.hstsEnabled,
+        http2Enabled:
+          input.advancedConfig?.http2Enabled !== undefined
+            ? input.advancedConfig.http2Enabled
+            : currentDomain.http2Enabled,
+        grpcEnabled:
+          input.advancedConfig?.grpcEnabled !== undefined
+            ? input.advancedConfig.grpcEnabled
+            : currentDomain.grpcEnabled,
+        customLocations:
+          input.advancedConfig?.customLocations !== undefined
+            ? JSON.parse(JSON.stringify(input.advancedConfig.customLocations))
+            : currentDomain.customLocations,
       },
     });
 
