@@ -12,7 +12,7 @@ RUN apt-get update && \
 
 
 # Copy script and make executable
-COPY scripts/install-nginx-modsecurity.sh .
+COPY docker/install-nginx-modsecurity.sh .
 RUN chmod +x install-nginx-modsecurity.sh
 
 # Create dirs used in script
