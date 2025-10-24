@@ -1,0 +1,20 @@
+# Compiled JavaScript files
+*.js
+!ui/app.js
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Node modules (if installed locally)
+node_modules/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

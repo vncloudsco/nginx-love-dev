@@ -1,0 +1,72 @@
+{
+  "metadata": {
+    "id": "cloudflare-manager",
+    "name": "Cloudflare Manager",
+    "version": "1.0.0",
+    "description": "Manage Cloudflare DNS records and Firewall IP rules directly from your WAF platform",
+    "author": {
+      "name": "Nginx Love Team",
+      "email": "dev@nginxlove.com",
+      "url": "https://github.com/nginx-love"
+    },
+    "type": "integration",
+    "category": "firewall",
+    "tags": ["cloudflare", "dns", "firewall", "ip-blocking", "security"],
+    "icon": "https://www.cloudflare.com/favicon.ico",
+    "homepage": "https://github.com/nginx-love/cloudflare-manager-plugin",
+    "license": "MIT",
+    "minSystemVersion": "1.0.0",
+    "permissions": [
+      {
+        "resource": "external_api",
+        "actions": ["read", "write", "delete"]
+      }
+    ],
+    "configSchema": {
+      "type": "object",
+      "required": ["apiToken", "accountId"],
+      "properties": {
+        "apiToken": {
+          "type": "string",
+          "title": "Cloudflare API Token",
+          "description": "Your Cloudflare API token with DNS and Firewall permissions",
+          "minLength": 10
+        },
+        "accountId": {
+          "type": "string",
+          "title": "Cloudflare Account ID",
+          "description": "Your Cloudflare account ID",
+          "minLength": 10
+        },
+        "zoneId": {
+          "type": "string",
+          "title": "Default Zone ID (Optional)",
+          "description": "Default zone ID for operations"
+        },
+        "syncInterval": {
+          "type": "number",
+          "title": "Sync Interval (minutes)",
+          "description": "How often to sync data from Cloudflare",
+          "default": 30,
+          "minimum": 5,
+          "maximum": 1440
+        },
+        "enableAutoSync": {
+          "type": "boolean",
+          "title": "Enable Auto Sync",
+          "description": "Automatically sync DNS and Firewall rules",
+          "default": true
+        },
+        "logLevel": {
+          "type": "string",
+          "title": "Log Level",
+          "description": "Plugin logging level",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info"
+        }
+      }
+    }
+  },
+  "mainFile": "index.js",
+  "uiEntry": "ui/index.html"
+}

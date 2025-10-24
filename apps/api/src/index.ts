@@ -12,6 +12,7 @@ import { modSecSetupService } from './domains/modsec/services/modsec-setup.servi
 import { startAlertMonitoring, stopAlertMonitoring } from './domains/alerts/services/alert-monitoring.service';
 import { startSlaveNodeStatusCheck, stopSlaveNodeStatusCheck } from './domains/cluster/services/slave-status-checker.service';
 import { backupSchedulerService } from './domains/backup/services/backup-scheduler.service';
+import { initializePluginSystem, shutdownPluginSystem } from './domains/plugins';
 
 const app: Application = express();
 let monitoringTimer: NodeJS.Timeout | null = null;
@@ -80,10 +81,20 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to start backup scheduler:', error);
   }
+  
+  // Initialize plugin system
+  try {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    await initializePluginSystem(app, prisma);
+    logger.info('🔌 Plugin system initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize plugin system:', error);
+  }
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM signal received: closing HTTP server');
   if (monitoringTimer) {
     stopAlertMonitoring(monitoringTimer);
@@ -94,13 +105,14 @@ process.on('SIGTERM', () => {
   if (backupSchedulerTimer) {
     backupSchedulerService.stop(backupSchedulerTimer);
   }
+  await shutdownPluginSystem();
   server.close(() => {
     logger.info('HTTP server closed');
     process.exit(0);
   });
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('SIGINT signal received: closing HTTP server');
   if (monitoringTimer) {
     stopAlertMonitoring(monitoringTimer);
@@ -111,6 +123,7 @@ process.on('SIGINT', () => {
   if (backupSchedulerTimer) {
     backupSchedulerService.stop(backupSchedulerTimer);
   }
+  await shutdownPluginSystem();
   server.close(() => {
     logger.info('HTTP server closed');
     process.exit(0);

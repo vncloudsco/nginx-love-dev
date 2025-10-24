@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "id": "hello-world",
+    "name": "Hello World Plugin",
+    "version": "1.0.0",
+    "description": "A simple example plugin demonstrating plugin system capabilities",
+    "author": {
+      "name": "Nginx Love Team",
+      "email": "dev@nginxlove.com",
+      "url": "https://github.com/nginx-love"
+    },
+    "type": "feature",
+    "category": "example",
+    "tags": ["example", "demo", "hello-world"],
+    "license": "MIT",
+    "minSystemVersion": "1.0.0",
+    "permissions": [
+      {
+        "resource": "domains",
+        "actions": ["read"]
+      }
+    ],
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "greeting": {
+          "type": "string",
+          "description": "Custom greeting message",
+          "default": "Hello"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable or disable plugin",
+          "default": true
+        }
+      }
+    }
+  },
+  "mainFile": "index.js"
+}

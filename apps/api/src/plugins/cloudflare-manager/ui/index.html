@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloudflare Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50">
+  <div id="app" class="container mx-auto p-6">
+    <!-- Header -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <img src="https://www.cloudflare.com/favicon.ico" alt="Cloudflare" class="w-12 h-12">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Cloudflare Manager</h1>
+            <p class="text-gray-600">Manage DNS records and Firewall rules</p>
+          </div>
+        </div>
+        <button @click="syncData" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+          <i class="fas fa-sync-alt" :class="{'fa-spin': syncing}"></i>
+          Sync
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div v-if="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-sm text-gray-600">DNS Records Created</div>
+        <div class="text-2xl font-bold text-blue-600">{{ stats.dnsRecordsCreated }}</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-sm text-gray-600">Firewall Rules</div>
+        <div class="text-2xl font-bold text-orange-600">{{ stats.firewallRulesCreated }}</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-sm text-gray-600">IPs Blocked</div>
+        <div class="text-2xl font-bold text-red-600">{{ stats.ipsBlocked }}</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="text-sm text-gray-600">IPs Whitelisted</div>
+        <div class="text-2xl font-bold text-green-600">{{ stats.ipsWhitelisted }}</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="bg-white rounded-lg shadow-sm mb-6">
+      <div class="border-b border-gray-200">
+        <nav class="flex -mb-px">
+          <button 
+            @click="activeTab = 'zones'"
+            :class="activeTab === 'zones' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            class="py-4 px-6 border-b-2 font-medium text-sm">
+            <i class="fas fa-globe mr-2"></i>Zones
+          </button>
+          <button 
+            @click="activeTab = 'dns'"
+            :class="activeTab === 'dns' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            class="py-4 px-6 border-b-2 font-medium text-sm">
+            <i class="fas fa-server mr-2"></i>DNS Records
+          </button>
+          <button 
+            @click="activeTab = 'firewall'"
+            :class="activeTab === 'firewall' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            class="py-4 px-6 border-b-2 font-medium text-sm">
+            <i class="fas fa-shield-alt mr-2"></i>Firewall Rules
+          </button>
+        </nav>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="p-6">
+        <!-- Zones Tab -->
+        <div v-if="activeTab === 'zones'">
+          <div class="mb-4 flex justify-between items-center">
+            <h3 class="text-lg font-semibold">Your Cloudflare Zones</h3>
+            <button @click="loadZones" class="text-blue-600 hover:text-blue-700">
+              <i class="fas fa-refresh"></i> Refresh
+            </button>
+          </div>
+          
+          <div v-if="loading" class="text-center py-8">
+            <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+          </div>
+
+          <div v-else-if="zones.length === 0" class="text-center py-8 text-gray-500">
+            No zones found
+          </div>
+
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div v-for="zone in zones" :key="zone.id" class="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" @click="selectZone(zone)">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="font-semibold text-gray-900">{{ zone.name }}</h4>
+                <span :class="zone.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'" class="px-2 py-1 rounded text-xs font-medium">
+                  {{ zone.status }}
+                </span>
+              </div>
+              <p class="text-sm text-gray-600">ID: {{ zone.id }}</p>
+              <div class="mt-2 flex gap-2">
+                <span class="text-xs bg-gray-100 px-2 py-1 rounded">{{ zone.type }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DNS Tab -->
+        <div v-if="activeTab === 'dns'">
+          <div class="mb-4 flex justify-between items-center">
+            <div>
+              <h3 class="text-lg font-semibold">DNS Records</h3>
+              <p v-if="selectedZone" class="text-sm text-gray-600">Zone: {{ selectedZone.name }}</p>
+            </div>
+            <button @click="showDNSForm = true" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700" :disabled="!selectedZone">
+              <i class="fas fa-plus mr-2"></i>Add Record
+            </button>
+          </div>
+
+          <div v-if="!selectedZone" class="text-center py-8 text-gray-500">
+            Please select a zone first
+          </div>
+
+          <div v-else-if="loading" class="text-center py-8">
+            <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+          </div>
+
+          <div v-else>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Content</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">TTL</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Proxy</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="record in dnsRecords" :key="record.id">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">{{ record.type }}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ record.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ record.content }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ record.ttl === 1 ? 'Auto' : record.ttl }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span v-if="record.proxied" class="text-orange-600"><i class="fas fa-cloud"></i></span>
+                      <span v-else class="text-gray-400"><i class="fas fa-cloud-slash"></i></span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                      <button @click="editDNS(record)" class="text-blue-600 hover:text-blue-800 mr-3">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button @click="deleteDNS(record)" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Firewall Tab -->
+        <div v-if="activeTab === 'firewall'">
+          <div class="mb-4 flex justify-between items-center">
+            <h3 class="text-lg font-semibold">Firewall IP Rules</h3>
+            <div class="flex gap-2">
+              <button @click="showQuickBlock = true" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">
+                <i class="fas fa-ban mr-2"></i>Quick Block IP
+              </button>
+              <button @click="showFirewallForm = true" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                <i class="fas fa-plus mr-2"></i>Add Rule
+              </button>
+            </div>
+          </div>
+
+          <div v-if="loading" class="text-center py-8">
+            <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+          </div>
+
+          <div v-else>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mode</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Target</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="rule in firewallRules" :key="rule.id">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span :class="getModeClass(rule.mode)" class="px-2 py-1 text-xs font-medium rounded">
+                        {{ rule.mode }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ rule.configuration.target }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{{ rule.configuration.value }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600">{{ rule.notes || '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                      <button @click="editFirewall(rule)" class="text-blue-600 hover:text-blue-800 mr-3">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button @click="deleteFirewall(rule)" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DNS Form Modal -->
+    <div v-if="showDNSForm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold mb-4">{{ editingDNS ? 'Edit' : 'Add' }} DNS Record</h3>
+        <form @submit.prevent="saveDNS">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+              <select v-model="dnsForm.type" class="w-full border border-gray-300 rounded-lg px-3 py-2" required>
+                <option value="A">A</option>
+                <option value="AAAA">AAAA</option>
+                <option value="CNAME">CNAME</option>
+                <option value="MX">MX</option>
+                <option value="TXT">TXT</option>
+                <option value="NS">NS</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <input v-model="dnsForm.name" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="subdomain" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Content</label>
+              <input v-model="dnsForm.content" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="192.168.1.1" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">TTL (seconds)</label>
+              <input v-model.number="dnsForm.ttl" type="number" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="3600">
+            </div>
+            <div class="flex items-center">
+              <input v-model="dnsForm.proxied" type="checkbox" class="mr-2">
+              <label class="text-sm text-gray-700">Proxied (Orange Cloud)</label>
+            </div>
+          </div>
+          <div class="mt-6 flex justify-end gap-2">
+            <button type="button" @click="closeDNSForm" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Quick Block Modal -->
+    <div v-if="showQuickBlock" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold mb-4 text-red-600">
+          <i class="fas fa-ban mr-2"></i>Quick Block IP
+        </h3>
+        <form @submit.prevent="quickBlockIP">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">IP Address</label>
+              <input v-model="quickBlockForm.ip" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="192.168.1.1" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Reason (Optional)</label>
+              <textarea v-model="quickBlockForm.notes" class="w-full border border-gray-300 rounded-lg px-3 py-2" rows="2" placeholder="Malicious activity detected"></textarea>
+            </div>
+          </div>
+          <div class="mt-6 flex justify-end gap-2">
+            <button type="button" @click="showQuickBlock = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Block IP</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Firewall Form Modal -->
+    <div v-if="showFirewallForm" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold mb-4">{{ editingFirewall ? 'Edit' : 'Add' }} Firewall Rule</h3>
+        <form @submit.prevent="saveFirewall">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Mode</label>
+              <select v-model="firewallForm.mode" class="w-full border border-gray-300 rounded-lg px-3 py-2" required>
+                <option value="block">Block</option>
+                <option value="challenge">Challenge</option>
+                <option value="whitelist">Whitelist</option>
+                <option value="js_challenge">JS Challenge</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Target</label>
+              <select v-model="firewallForm.configuration.target" class="w-full border border-gray-300 rounded-lg px-3 py-2" required>
+                <option value="ip">IP Address</option>
+                <option value="ip_range">IP Range</option>
+                <option value="country">Country</option>
+                <option value="asn">ASN</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Value</label>
+              <input v-model="firewallForm.configuration.value" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="192.168.1.1 or US or AS13335" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <textarea v-model="firewallForm.notes" class="w-full border border-gray-300 rounded-lg px-3 py-2" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="mt-6 flex justify-end gap-2">
+            <button type="button" @click="closeFirewallForm" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

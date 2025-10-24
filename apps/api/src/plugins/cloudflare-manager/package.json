@@ -1,0 +1,31 @@
+{
+  "name": "@nginx-love/cloudflare-manager-plugin",
+  "version": "1.0.0",
+  "description": "Cloudflare DNS and Firewall management plugin for Nginx WAF",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc index.ts --outDir . --module commonjs --target es2020 --esModuleInterop true && tsc services/cloudflare-client.ts --outDir services --module commonjs --target es2020",
+    "watch": "tsc index.ts --outDir . --module commonjs --target es2020 --watch"
+  },
+  "keywords": [
+    "cloudflare",
+    "dns",
+    "firewall",
+    "waf",
+    "nginx",
+    "plugin"
+  ],
+  "author": "Nginx Love Team <dev@nginxlove.com>",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.2"
+  },
+  "peerDependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.12",
+    "typescript": "^5.5.4"
+  }
+}

@@ -49,5 +49,5 @@ landing/*
 .env
 .pnpm-store/
 .seeded
-*.md
-/docs/*
+# *.md
+# /docs/*

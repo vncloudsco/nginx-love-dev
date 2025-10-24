@@ -815,3 +815,61 @@ model NLBHealthCheck {
   @@index([upstreamHost, upstreamPort])
   @@map("nlb_health_checks")
 }
+
+// Plugin System Models
+
+enum PluginType {
+  feature
+  integration
+  ui
+  middleware
+  hook
+}
+
+enum PluginStatus {
+  active
+  inactive
+  error
+  installing
+  uninstalling
+}
+
+model Plugin {
+  id          String       @id // Plugin unique ID
+  name        String
+  version     String
+  description String       @db.Text
+  author      String       @db.Text // JSON string
+  type        PluginType
+  metadata    String       @db.Text // JSON string of full metadata
+  status      PluginStatus @default(inactive)
+  enabled     Boolean      @default(false)
+  config      String?      @db.Text // JSON string of plugin config
+
+  // Relations
+  storage PluginStorage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([enabled])
+  @@map("plugins")
+}
+
+model PluginStorage {
+  id       String @id @default(cuid())
+  pluginId String
+  plugin   Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  key   String
+  value String @db.Text // JSON serialized value
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([pluginId, key])
+  @@index([pluginId])
+  @@map("plugin_storage")
+}

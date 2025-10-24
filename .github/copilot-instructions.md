@@ -1,83 +1,62 @@
 # GitHub Copilot Instructions - Nginx WAF Management Platform
+## 🚀 Nginx WAF Management Platform — AI Coding Agent Instructions
 
-## 🎯 Project Overview
+### 1. Big Picture Architecture
+- Monorepo structure: `/apps/api` (Node.js/Express/Prisma backend), `/apps/web` (React/TypeScript frontend), `/apps/docs` (documentation), `/docker` (Docker configs), `/config` (Nginx configs), `/scripts` (deployment/setup).
+- Backend follows Domain-Driven Design (DDD): see `/apps/api/src/domains/*` for business logic modules (auth, users, domains, ssl, modsec, acl, alerts, logs, performance, dashboard).
+- Frontend uses React + TanStack Router, ShadCN UI, Tailwind CSS. Components and hooks are in `/apps/web/src/components/` and `/apps/web/src/hooks/`.
+- Data flows: API server exposes RESTful endpoints, frontend consumes via TanStack Query. Real-time monitoring and alerting via websockets or polling (see `/apps/api/src/alerts/`, `/apps/api/src/performance/`).
+- Infrastructure: Dockerized for local/dev/prod. Nginx and ModSecurity configs in `/config` and `/docker`.
 
-This is a comprehensive Nginx management system with ModSecurity WAF, providing domain management, SSL certificates, and real-time monitoring. The project is built as a monorepo using:
+### 2. Developer Workflows
+- **Build/Dev:** Use `pnpm` and `turbo` for monorepo tasks. Common scripts:
+   - `pnpm dev` (in `/apps/api` or `/apps/web`) for local development
+   - `pnpm build` for production builds
+   - `pnpm test` for Vitest unit/integration tests
+- **Deployment:**
+   - `./scripts/deploy.sh` for full production install (Nginx, backend, frontend)
+   - `./scripts/quickstart.sh` for local dev (no Nginx/root)
+   - `./scripts/update.sh` for upgrades
+- **Database:**
+   - Prisma migrations in `/apps/api/prisma/migrations/`
+   - Seed scripts: `/apps/api/prisma/seed*.ts`
+- **Debugging:**
+   - Use Vitest for backend tests, React Testing Library for frontend (if present)
+   - Logs: backend logs to console, audit logs in `/apps/api/src/logs/`
 
-- **Backend**: Node.js + Express + TypeScript + Prisma + PostgreSQL
-- **Frontend**: React + TypeScript + Vite + TanStack Router + ShadCN UI + Tailwind CSS
-- **Infrastructure**: Docker + Nginx + ModSecurity WAF
-- **Tooling**: Turbo monorepo, pnpm, Vitest
+### 3. Project-Specific Conventions
+- All API endpoints must validate input with `express-validator`.
+- Role-based access control (RBAC) enforced in backend middleware.
+- Sensitive operations (SSL, ModSecurity, Nginx config changes) require extra validation and audit logging.
+- No hardcoded secrets; use environment variables and `.env` files.
+- Frontend: use ShadCN UI and Tailwind for all new components; keep forms accessible and type-safe.
+- Plugin system: plugins live in `/apps/api/src/plugins/` (backend) and `/apps/web/src/plugins/` (frontend). Each plugin has its own config file (e.g., `plugin.config.json`).
 
-## 📁 Architecture & Structure
+### 4. Integration Points & External Dependencies
+- Nginx and ModSecurity: config templates in `/config` and `/docker`, managed via backend APIs.
+- SSL: Let's Encrypt integration and manual upload supported (see `/apps/api/src/ssl/`).
+- Alerts: email/Telegram notifications (see `/apps/api/src/alerts/`).
+- Database: PostgreSQL via Prisma ORM.
+- Marketplace: plugin marketplace supports zip upload/download and online registry (see plugin docs).
 
-### Monorepo Layout
-```
-/apps/api/          # Backend API server (Express + Prisma)
-/apps/web/          # Frontend React application
-/apps/docs/         # Documentation site
-/docker/            # Docker configurations
-/config/            # Nginx configurations
-/scripts/           # Deployment and setup scripts
-```
+### 5. Examples & Patterns
+- Example backend domain: `/apps/api/src/domains/` (site/domain CRUD, validation, RBAC)
+- Example frontend page: `/apps/web/src/routes/` (route-based code splitting, TanStack Router)
+- Example plugin: `/apps/api/src/plugins/hello-world/`, `/apps/web/src/plugins/hello-world/`
+- Example migration: `/apps/api/prisma/migrations/20250930140957_initial_setup/`
 
-### Backend Domain-Driven Design (DDD)
-```
-/apps/api/src/
-├── domains/        # Business domain modules
-│   ├── auth/       # Authentication & authorization
-│   ├── users/      # User management
-│   ├── domains/    # Domain/site management
-│   ├── ssl/        # SSL certificate management
-│   ├── modsec/     # ModSecurity WAF configuration
-│   ├── acl/        # Access Control Lists
-│   ├── alerts/     # Alert system
-│   ├── logs/       # Log management
-│   ├── performance/ # Performance monitoring
-│   └── dashboard/  # Dashboard data
-├── middleware/     # Express middleware
-├── routes/         # API route definitions
-├── utils/          # Utility functions
-├── shared/         # Shared types & constants
-└── config/         # Application configuration
-```
+### 6. Safety & Code Review
+- Always validate input, sanitize outputs, and audit sensitive changes.
+- Never generate test/debug files or code unless explicitly requested.
+- All code must be clean, maintainable, and follow project architecture.
+- Review for security: no hardcoded secrets, no dangerous shell commands, no sensitive data in logs/UI/API.
 
-## 🛡️ Code Review Guidelines
-
-### Security Focus
-Given this is a security-focused WAF management platform, prioritize:
-
-1. **Authentication & Authorization**
-   - Review JWT token handling and validation
-   - Check role-based access control (RBAC) implementation
-   - Validate input sanitization and XSS Attack, SQL injection prevention
-   - Ensure secure password handling with bcrypt
-
-2. **Input Validation**
-   - All user inputs must be validated using express-validator
-   - File uploads should have strict type and size limitations
-   - API endpoints should validate request bodies and parameters
-
-3. **Configuration Security**
-   - Nginx configuration changes should be validated
-   - ModSecurity rules should be tested before deployment
-   - SSL certificate handling must be secure
-
-### Backend Code Standards
-
-#### API Design
-- Follow RESTful principles
-- Use consistent HTTP status codes
-- Implement proper error handling with structured error responses
-- Use middleware for cross-cutting concerns (auth, validation, logging)
-
-#### Database & Prisma
-- Use Prisma schema best practices with proper relations
-- Implement database transactions for multi-step operations
-- Use proper indexing for performance
-- Follow migration naming conventions
-
-#### TypeScript Standards
+---
+For more details, see:
+- `README.md` (project overview, quickstart, features)
+- `/apps/api/src/` and `/apps/web/src/` for code structure
+- `/apps/docs/guide/plugins.md` for plugin development
+- `/scripts/` for deployment workflows
 - Use strict TypeScript configuration
 - Define proper interfaces and types
 - Avoid `any` types - use proper type definitions
