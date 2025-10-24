@@ -64,12 +64,31 @@ Plugin quản lý Cloudflare DNS records và Firewall IP rules trực tiếp t�
 2. Scroll xuống sidebar bên phải
 3. Copy **Zone ID**
 
-### 2. Compile Plugin
+### 2. Build Plugin
+
+**Plugin có build script riêng, KHÔNG cần compile toàn bộ backend!**
 
 ```bash
 cd apps/api/src/plugins/cloudflare-manager
-npx tsc index.ts --outDir . --module commonjs --target es2020 --esModuleInterop true
-npx tsc services/cloudflare-client.ts --outDir services --module commonjs --target es2020
+
+# Install dependencies
+npm install
+
+# Build plugin (TypeScript → JavaScript)
+npm run build
+```
+
+**Output:**
+```
+✅ Plugin built successfully!
+📦 Output files:
+   - index.js
+   - services/cloudflare-client.js
+```
+
+**Verify build:**
+```bash
+ls -la index.js services/cloudflare-client.js
 ```
 
 ### 3. Install via API
