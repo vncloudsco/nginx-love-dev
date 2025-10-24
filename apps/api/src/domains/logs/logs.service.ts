@@ -35,6 +35,102 @@ async function readLastLines(filePath: string, numLines: number): Promise<string
 }
 
 /**
+ * Search logs by uniqueId using grep for efficient searching
+ */
+async function searchLogsByUniqueId(uniqueId: string, limit: number = 100): Promise<ParsedLogEntry[]> {
+  try {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    const results: ParsedLogEntry[] = [];
+    const maxBuffer = 50 * 1024 * 1024; // 50MB buffer
+    
+    // Search pattern for uniqueId in ModSecurity logs
+    const searchPattern = `unique_id "${uniqueId}"`;
+    
+    // Search in main nginx error log
+    try {
+      const { stdout } = await execAsync(
+        `grep -F '${searchPattern}' ${NGINX_ERROR_LOG} 2>/dev/null || echo ""`,
+        { maxBuffer }
+      );
+      if (stdout.trim()) {
+        const lines = stdout.trim().split('\n');
+        lines.forEach((line: string, index: number) => {
+          const parsed = parseModSecLogLine(line, index);
+          if (parsed) {
+            results.push(parsed);
+          }
+        });
+      }
+    } catch (error) {
+      logger.warn('Could not search main error log:', error);
+    }
+    
+    // Search in domain-specific error logs
+    try {
+      const domainLogs = await getDomainLogFiles();
+      for (const domainLog of domainLogs) {
+        // Search HTTP error log
+        if (domainLog.errorLog) {
+          try {
+            const { stdout } = await execAsync(
+              `grep -F '${searchPattern}' ${domainLog.errorLog} 2>/dev/null || echo ""`,
+              { maxBuffer }
+            );
+            if (stdout.trim()) {
+              const lines = stdout.trim().split('\n');
+              lines.forEach((line: string, index: number) => {
+                const parsed = parseModSecLogLine(line, index);
+                if (parsed) {
+                  parsed.domain = domainLog.domain;
+                  results.push(parsed);
+                }
+              });
+            }
+          } catch (error) {
+            // Ignore individual file errors
+          }
+        }
+        
+        // Search HTTPS error log
+        if (domainLog.sslErrorLog) {
+          try {
+            const { stdout } = await execAsync(
+              `grep -F '${searchPattern}' ${domainLog.sslErrorLog} 2>/dev/null || echo ""`,
+              { maxBuffer }
+            );
+            if (stdout.trim()) {
+              const lines = stdout.trim().split('\n');
+              lines.forEach((line: string, index: number) => {
+                const parsed = parseModSecLogLine(line, index);
+                if (parsed) {
+                  parsed.domain = domainLog.domain;
+                  results.push(parsed);
+                }
+              });
+            }
+          } catch (error) {
+            // Ignore individual file errors
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Error searching domain logs:', error);
+    }
+    
+    // Sort by timestamp descending and limit
+    return results
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
+  } catch (error) {
+    logger.error('Error searching by uniqueId:', error);
+    return [];
+  }
+}
+
+/**
  * Get list of domain-specific log files
  */
 async function getDomainLogFiles(): Promise<{ domain: string; accessLog: string; errorLog: string; sslAccessLog: string; sslErrorLog: string }[]> {
@@ -99,6 +195,10 @@ export async function getParsedLogs(options: LogFilterOptions = {}): Promise<Par
   const allLogs: ParsedLogEntry[] = [];
 
   try {
+    // If searching by uniqueId, use grep for efficient search across all logs
+    if (uniqueId) {
+      return await searchLogsByUniqueId(uniqueId, limit);
+    }
     // If specific domain is requested, read only that domain's logs
     if (domain && domain !== 'all') {
       // Define all possible log file paths (both HTTP and HTTPS)

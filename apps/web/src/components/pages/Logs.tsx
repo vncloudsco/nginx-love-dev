@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ColumnDef,
@@ -198,30 +198,50 @@ const LogEntries = ({
   setSelectedLog: (log: LogEntry | null) => void;
 }) => {
   const [isPageChanging, setIsPageChanging] = useState(false);
-  // Build query parameters
-  const params: any = {
-    page,
-    limit,
-  };
+  
+  // Stabilize uniqueId to prevent it from changing reference
+  const stableUniqueId = useMemo(() => {
+    if (!uniqueId) return "";
+    // Ensure it's always a string and doesn't change unless the actual value changes
+    const result = String(uniqueId);
+    console.log('[LogEntries] uniqueId stabilization:', {
+      original: uniqueId,
+      originalType: typeof uniqueId,
+      result: result,
+      resultType: typeof result,
+      equal: uniqueId === result
+    });
+    return result;
+  }, [uniqueId]);
 
-  if (level !== "all") {
-    params.level = level;
-  }
-  if (type !== "all") {
-    params.type = type;
-  }
-  if (domain !== "all") {
-    params.domain = domain;
-  }
-  if (search) {
-    params.search = search;
-  }
-  if (ruleId) {
-    params.ruleId = ruleId;
-  }
-  if (uniqueId) {
-    params.uniqueId = uniqueId;
-  }
+  // Build query parameters - memoized to prevent unnecessary refetches
+  const params = useMemo(() => {
+    const p: any = {
+      page,
+      limit,
+    };
+
+    if (level !== "all") {
+      p.level = level;
+    }
+    if (type !== "all") {
+      p.type = type;
+    }
+    if (domain !== "all") {
+      p.domain = domain;
+    }
+    if (search) {
+      p.search = search;
+    }
+    if (ruleId) {
+      p.ruleId = ruleId;
+    }
+    if (stableUniqueId) {
+      p.uniqueId = stableUniqueId;
+    }
+    
+    return p;
+  }, [page, limit, level, type, domain, search, ruleId, stableUniqueId]);
 
   // Use regular query instead of suspense query for better control
   const { data: logsResponse, refetch, isFetching, isLoading } = useLogs(params);
@@ -547,10 +567,31 @@ const LogEntries = ({
           {/* ModSecurity Unique ID */}
           <div className="relative w-full lg:w-[180px]">
             <Input
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              spellCheck="false"
               placeholder="Unique ID..."
-              value={uniqueId}
+              value={uniqueId || ""}
               onChange={(e) => {
+                console.log('[Input onChange] uniqueId:', {
+                  value: e.target.value,
+                  type: typeof e.target.value,
+                  length: e.target.value.length
+                });
                 const event = new CustomEvent('uniqueIdChange', { detail: e.target.value });
+                window.dispatchEvent(event);
+              }}
+              onPaste={(e) => {
+                // Prevent any browser formatting on paste
+                e.preventDefault();
+                const text = e.clipboardData.getData('text/plain');
+                console.log('[Input onPaste] uniqueId:', {
+                  text: text,
+                  type: typeof text,
+                  length: text.length
+                });
+                const event = new CustomEvent('uniqueIdChange', { detail: text });
                 window.dispatchEvent(event);
               }}
             />
@@ -933,10 +974,30 @@ const Logs = () => {
     "ruleId",
     parseAsString.withDefault("")
   );
-  const [uniqueId, setUniqueId] = useQueryState(
-    "uniqueId",
-    parseAsString.withDefault("")
-  );
+  
+  // Don't use useQueryState for uniqueId - it causes precision loss
+  // Use manual URL sync instead
+  const [uniqueId, setUniqueIdState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('uniqueId') || "";
+    }
+    return "";
+  });
+  
+  const setUniqueId = useCallback((value: string) => {
+    setUniqueIdState(value);
+    // Manually update URL without using nuqs
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (value) {
+        url.searchParams.set('uniqueId', value);
+      } else {
+        url.searchParams.delete('uniqueId');
+      }
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
 
   // Table state
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -1084,7 +1145,7 @@ const Logs = () => {
         type={type}
         domain={domain}
         ruleId={ruleId}
-        uniqueId={uniqueId}
+        uniqueId={uniqueId || ""}
         setPage={setPage}
         setLimit={setLimit}
         sorting={sorting}
