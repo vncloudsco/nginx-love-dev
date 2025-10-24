@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as CatchallRouteImport } from './routes/$catchall'
+import { Route as PluginsIndexRouteImport } from './routes/plugins.index'
 import { Route as AuthIndexRouteImport } from './routes/_auth/index'
+import { Route as PluginsPluginIdRouteImport } from './routes/plugins.$pluginId'
 import { Route as AuthUsersRouteImport } from './routes/_auth/users'
 import { Route as AuthSslRouteImport } from './routes/_auth/ssl'
 import { Route as AuthPerformanceRouteImport } from './routes/_auth/performance'
@@ -42,10 +44,20 @@ const CatchallRoute = CatchallRouteImport.update({
   path: '/$catchall',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PluginsIndexRoute = PluginsIndexRouteImport.update({
+  id: '/plugins/',
+  path: '/plugins/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthIndexRoute = AuthIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthRoute,
+} as any)
+const PluginsPluginIdRoute = PluginsPluginIdRouteImport.update({
+  id: '/plugins/$pluginId',
+  path: '/plugins/$pluginId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthUsersRoute = AuthUsersRouteImport.update({
   id: '/users',
@@ -135,7 +147,9 @@ export interface FileRoutesByFullPath {
   '/performance': typeof AuthPerformanceRoute
   '/ssl': typeof AuthSslRoute
   '/users': typeof AuthUsersRoute
+  '/plugins/$pluginId': typeof PluginsPluginIdRoute
   '/': typeof AuthIndexRoute
+  '/plugins': typeof PluginsIndexRoute
 }
 export interface FileRoutesByTo {
   '/$catchall': typeof CatchallRoute
@@ -154,7 +168,9 @@ export interface FileRoutesByTo {
   '/performance': typeof AuthPerformanceRoute
   '/ssl': typeof AuthSslRoute
   '/users': typeof AuthUsersRoute
+  '/plugins/$pluginId': typeof PluginsPluginIdRoute
   '/': typeof AuthIndexRoute
+  '/plugins': typeof PluginsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -175,7 +191,9 @@ export interface FileRoutesById {
   '/_auth/performance': typeof AuthPerformanceRoute
   '/_auth/ssl': typeof AuthSslRoute
   '/_auth/users': typeof AuthUsersRoute
+  '/plugins/$pluginId': typeof PluginsPluginIdRoute
   '/_auth/': typeof AuthIndexRoute
+  '/plugins/': typeof PluginsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -196,7 +214,9 @@ export interface FileRouteTypes {
     | '/performance'
     | '/ssl'
     | '/users'
+    | '/plugins/$pluginId'
     | '/'
+    | '/plugins'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/$catchall'
@@ -215,7 +235,9 @@ export interface FileRouteTypes {
     | '/performance'
     | '/ssl'
     | '/users'
+    | '/plugins/$pluginId'
     | '/'
+    | '/plugins'
   id:
     | '__root__'
     | '/$catchall'
@@ -235,13 +257,17 @@ export interface FileRouteTypes {
     | '/_auth/performance'
     | '/_auth/ssl'
     | '/_auth/users'
+    | '/plugins/$pluginId'
     | '/_auth/'
+    | '/plugins/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   CatchallRoute: typeof CatchallRoute
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PluginsPluginIdRoute: typeof PluginsPluginIdRoute
+  PluginsIndexRoute: typeof PluginsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -267,12 +293,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CatchallRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/plugins/': {
+      id: '/plugins/'
+      path: '/plugins'
+      fullPath: '/plugins'
+      preLoaderRoute: typeof PluginsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_auth/': {
       id: '/_auth/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthIndexRouteImport
       parentRoute: typeof AuthRoute
+    }
+    '/plugins/$pluginId': {
+      id: '/plugins/$pluginId'
+      path: '/plugins/$pluginId'
+      fullPath: '/plugins/$pluginId'
+      preLoaderRoute: typeof PluginsPluginIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_auth/users': {
       id: '/_auth/users'
@@ -417,6 +457,8 @@ const rootRouteChildren: RootRouteChildren = {
   CatchallRoute: CatchallRoute,
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
+  PluginsPluginIdRoute: PluginsPluginIdRoute,
+  PluginsIndexRoute: PluginsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

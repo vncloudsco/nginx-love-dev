@@ -3,7 +3,7 @@
  * API calls for plugin management
  */
 
-import apiClient from '@/lib/apiClient';
+import apiClient from './api';
 import type {
   Plugin,
   PluginListResponse,
