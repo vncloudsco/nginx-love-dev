@@ -46,6 +46,7 @@ export interface LatestAttackEntry {
   urlPath: string;
   attackType: string;
   ruleId?: string;
+  uniqueId?: string; // ModSecurity unique ID for precise log lookup
   severity?: string;
   action: string;
   logId: string;

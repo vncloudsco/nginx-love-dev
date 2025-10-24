@@ -341,6 +341,7 @@ export class DashboardAnalyticsService {
           urlPath: parsed.path || parsed.uri || '/',
           attackType,
           ruleId: parsed.ruleId,
+          uniqueId: parsed.uniqueId, // Add uniqueId for precise log lookup
           severity: parsed.severity,
           action: 'Blocked',
           logId,
