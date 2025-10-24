@@ -34,6 +34,8 @@ export interface LogFilterOptions {
   type?: string;
   search?: string;
   domain?: string;
+  ruleId?: string;
+  uniqueId?: string;
 }
 
 export interface LogStatistics {

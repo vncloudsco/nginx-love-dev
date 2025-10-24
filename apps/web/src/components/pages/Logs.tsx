@@ -153,6 +153,8 @@ const LogEntries = ({
   level,
   type,
   domain,
+  ruleId,
+  uniqueId,
   setPage,
   setLimit,
   sorting,
@@ -176,6 +178,8 @@ const LogEntries = ({
   level: string;
   type: string;
   domain: string;
+  ruleId: string;
+  uniqueId: string;
   setPage: (page: number) => void;
   setLimit: (limit: number) => void;
   sorting: SortingState;
@@ -211,6 +215,12 @@ const LogEntries = ({
   }
   if (search) {
     params.search = search;
+  }
+  if (ruleId) {
+    params.ruleId = ruleId;
+  }
+  if (uniqueId) {
+    params.uniqueId = uniqueId;
   }
 
   // Use regular query instead of suspense query for better control
@@ -285,6 +295,12 @@ const LogEntries = ({
       }
       if (search) {
         params.search = search;
+      }
+      if (ruleId) {
+        params.ruleId = ruleId;
+      }
+      if (uniqueId) {
+        params.uniqueId = uniqueId;
       }
 
       await downloadLogs(params);
@@ -500,16 +516,15 @@ const LogEntries = ({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {/* Filters */}
-        <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center">
-          {/* Search */}
-          <div className="relative flex-1">
+        {/* Filters - All in one row */}
+        <div className="flex flex-col gap-3 mb-6 lg:flex-row lg:items-center lg:flex-wrap">
+          {/* General Search */}
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search logs..."
               value={search}
               onChange={(e) => {
-                // This will be handled by the parent component
                 const event = new CustomEvent('searchChange', { detail: e.target.value });
                 window.dispatchEvent(event);
               }}
@@ -517,88 +532,110 @@ const LogEntries = ({
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2">
-            <Select
-              value={domain}
-              onValueChange={(value) => {
-                // This will be handled by the parent component
-                const event = new CustomEvent('domainChange', { detail: value });
+          {/* ModSecurity Rule ID */}
+          <div className="relative w-full lg:w-[180px]">
+            <Input
+              placeholder="Rule ID..."
+              value={ruleId}
+              onChange={(e) => {
+                const event = new CustomEvent('ruleIdChange', { detail: e.target.value });
                 window.dispatchEvent(event);
               }}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by domain" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Domains</SelectItem>
-                {domains.map((domain) => (
-                  <SelectItem key={domain.name} value={domain.name}>
-                    {domain.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={level} onValueChange={(value) => {
-              // This will be handled by the parent component
-              const event = new CustomEvent('levelChange', { detail: value });
-              window.dispatchEvent(event);
-            }}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Filter by level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Levels</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={type} onValueChange={(value) => {
-              // This will be handled by the parent component
-              const event = new CustomEvent('typeChange', { detail: value });
-              window.dispatchEvent(event);
-            }}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Filter by type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="access">Access</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-                <SelectItem value="system">System</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto">
-                  Columns <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {table
-                  .getAllColumns()
-                  .filter((column) => column.getCanHide())
-                  .map((column) => {
-                    return (
-                      <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) =>
-                          column.toggleVisibility(!!value)
-                        }
-                      >
-                        {column.id}
-                      </DropdownMenuCheckboxItem>
-                    );
-                  })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            />
           </div>
+
+          {/* ModSecurity Unique ID */}
+          <div className="relative w-full lg:w-[180px]">
+            <Input
+              placeholder="Unique ID..."
+              value={uniqueId}
+              onChange={(e) => {
+                const event = new CustomEvent('uniqueIdChange', { detail: e.target.value });
+                window.dispatchEvent(event);
+              }}
+            />
+          </div>
+
+          {/* Domain Filter */}
+          <Select
+            value={domain}
+            onValueChange={(value) => {
+              const event = new CustomEvent('domainChange', { detail: value });
+              window.dispatchEvent(event);
+            }}
+          >
+            <SelectTrigger className="w-full lg:w-[160px]">
+              <SelectValue placeholder="Domain" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Domains</SelectItem>
+              {domains.map((domain) => (
+                <SelectItem key={domain.name} value={domain.name}>
+                  {domain.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Level Filter */}
+          <Select value={level} onValueChange={(value) => {
+            const event = new CustomEvent('levelChange', { detail: value });
+            window.dispatchEvent(event);
+          }}>
+            <SelectTrigger className="w-full lg:w-[120px]">
+              <SelectValue placeholder="Level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Levels</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="warning">Warning</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Type Filter */}
+          <Select value={type} onValueChange={(value) => {
+            const event = new CustomEvent('typeChange', { detail: value });
+            window.dispatchEvent(event);
+          }}>
+            <SelectTrigger className="w-full lg:w-[120px]">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="access">Access</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+              <SelectItem value="system">System</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Column Visibility */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                Columns <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {table
+                .getAllColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => {
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      className="capitalize"
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(value) =>
+                        column.toggleVisibility(!!value)
+                      }
+                    >
+                      {column.id}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="rounded-md border">
           <Table>
@@ -892,6 +929,14 @@ const Logs = () => {
     "domain",
     parseAsString.withDefault("all")
   );
+  const [ruleId, setRuleId] = useQueryState(
+    "ruleId",
+    parseAsString.withDefault("")
+  );
+  const [uniqueId, setUniqueId] = useQueryState(
+    "uniqueId",
+    parseAsString.withDefault("")
+  );
 
   // Table state
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -905,19 +950,25 @@ const Logs = () => {
     const handleDomainChange = (e: any) => setDomain(e.detail);
     const handleLevelChange = (e: any) => setLevel(e.detail);
     const handleTypeChange = (e: any) => setType(e.detail);
+    const handleRuleIdChange = (e: any) => setRuleId(e.detail);
+    const handleUniqueIdChange = (e: any) => setUniqueId(e.detail);
 
     window.addEventListener('searchChange', handleSearchChange);
     window.addEventListener('domainChange', handleDomainChange);
     window.addEventListener('levelChange', handleLevelChange);
     window.addEventListener('typeChange', handleTypeChange);
+    window.addEventListener('ruleIdChange', handleRuleIdChange);
+    window.addEventListener('uniqueIdChange', handleUniqueIdChange);
 
     return () => {
       window.removeEventListener('searchChange', handleSearchChange);
       window.removeEventListener('domainChange', handleDomainChange);
       window.removeEventListener('levelChange', handleLevelChange);
       window.removeEventListener('typeChange', handleTypeChange);
+      window.removeEventListener('ruleIdChange', handleRuleIdChange);
+      window.removeEventListener('uniqueIdChange', handleUniqueIdChange);
     };
-  }, [setSearch, setDomain, setLevel, setType]);
+  }, [setSearch, setDomain, setLevel, setType, setRuleId, setUniqueId]);
 
 
   const handleDownloadLogs = async () => {
@@ -935,6 +986,12 @@ const Logs = () => {
       }
       if (search) {
         params.search = search;
+      }
+      if (ruleId) {
+        params.ruleId = ruleId;
+      }
+      if (uniqueId) {
+        params.uniqueId = uniqueId;
       }
 
       await downloadLogs(params);
@@ -1026,6 +1083,8 @@ const Logs = () => {
         level={level}
         type={type}
         domain={domain}
+        ruleId={ruleId}
+        uniqueId={uniqueId}
         setPage={setPage}
         setLimit={setLimit}
         sorting={sorting}

@@ -94,7 +94,7 @@ async function getDomainLogFiles(): Promise<{ domain: string; accessLog: string;
  * Get parsed logs from all sources
  */
 export async function getParsedLogs(options: LogFilterOptions = {}): Promise<ParsedLogEntry[]> {
-  const { limit = 100, level, type, search, domain } = options;
+  const { limit = 100, level, type, search, domain, ruleId, uniqueId } = options;
 
   const allLogs: ParsedLogEntry[] = [];
 
@@ -285,6 +285,14 @@ export async function getParsedLogs(options: LogFilterOptions = {}): Promise<Par
         (log.ip && log.ip.includes(searchLower)) ||
         (log.path && log.path.toLowerCase().includes(searchLower))
       );
+    }
+
+    if (ruleId) {
+      filtered = filtered.filter(log => log.ruleId && log.ruleId.includes(ruleId));
+    }
+
+    if (uniqueId) {
+      filtered = filtered.filter(log => log.uniqueId && log.uniqueId.includes(uniqueId));
     }
 
     // Apply limit

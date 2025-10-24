@@ -490,9 +490,14 @@ function LatestNewsTable() {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          // Navigate to logs page with ruleId or attackType for better search
-                          const searchTerm = item.ruleId || item.attackType;
-                          window.location.href = `/logs?search=${encodeURIComponent(searchTerm)}`;
+                          // Navigate to logs page with uniqueId for precise log lookup
+                          if (item.uniqueId) {
+                            window.location.href = `/logs?uniqueId=${encodeURIComponent(item.uniqueId)}`;
+                          } else {
+                            // Fallback to search if uniqueId not available
+                            const searchTerm = item.ruleId || item.attackType;
+                            window.location.href = `/logs?search=${encodeURIComponent(searchTerm)}`;
+                          }
                         }}
                       >
                         <Eye className="h-4 w-4 mr-1" />
