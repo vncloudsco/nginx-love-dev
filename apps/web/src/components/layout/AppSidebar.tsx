@@ -21,6 +21,7 @@ import {
   Settings,
   LogOut,
   Network,
+  Puzzle,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -35,7 +36,6 @@ import {
   SidebarHeader,
   useSidebar
 } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,6 +84,7 @@ const menuGroups = [
       { key: 'backup', icon: Database, path: '/backup' },
       { key: 'users', icon: Users, path: '/users' },
       { key: 'nodes', icon: Server, path: '/nodes' },
+      { key: 'plugins', icon: Puzzle, path: '/plugins' },
     ]
   }
 ];
