@@ -20,3 +20,9 @@ export { PluginLoader } from './plugin-loader';
 
 // Plugin Manager
 export { PluginManager } from './plugin-manager';
+
+// Plugin Manager V2 - File-Based (NO DATABASE!)
+export { PluginManagerV2 } from './plugin-manager-v2';
+
+// Plugin Registry - File-Based Storage
+export { PluginRegistry } from './plugin-registry';

@@ -6,18 +6,18 @@
 import { Application } from 'express';
 import { PrismaClient } from '@prisma/client';
 import * as path from 'path';
-import { PluginManager } from '../../shared/plugin-sdk';
+import { PluginManagerV2 } from '../../shared/plugin-sdk';
 import { createPluginService } from './services/plugin.service';
 import { createPluginController } from './controllers/plugin.controller';
 import { createPluginRoutes } from './routes/plugin.routes';
 
 // Global plugin manager instance
-let pluginManager: PluginManager | null = null;
+let pluginManager: PluginManagerV2 | null = null;
 
 /**
- * Initialize plugin system
+ * Initialize plugin system - FILE-BASED (NO DATABASE!)
  */
-export const initializePluginSystem = async (app: Application, db: PrismaClient): Promise<PluginManager> => {
+export const initializePluginSystem = async (app: Application, db: PrismaClient): Promise<PluginManagerV2> => {
   if (pluginManager) {
     return pluginManager;
   }
@@ -25,8 +25,8 @@ export const initializePluginSystem = async (app: Application, db: PrismaClient)
   // Plugins directory path
   const pluginsDir = path.join(process.cwd(), 'src', 'plugins');
 
-  // Create plugin manager
-  pluginManager = new PluginManager(app, db, pluginsDir);
+  // Create plugin manager V2 (file-based, no database migration needed!)
+  pluginManager = new PluginManagerV2(app, db, pluginsDir);
 
   // Initialize plugin manager (load enabled plugins)
   await pluginManager.initialize();
@@ -37,7 +37,7 @@ export const initializePluginSystem = async (app: Application, db: PrismaClient)
 /**
  * Get plugin manager instance
  */
-export const getPluginManager = (): PluginManager | null => {
+export const getPluginManager = (): PluginManagerV2 | null => {
   return pluginManager;
 };
 
@@ -54,7 +54,7 @@ export const shutdownPluginSystem = async (): Promise<void> => {
 /**
  * Create plugin routes with initialized plugin manager
  */
-export const createPluginDomainRoutes = (pluginManager: PluginManager) => {
+export const createPluginDomainRoutes = (pluginManager: PluginManagerV2) => {
   const pluginService = createPluginService(pluginManager);
   const pluginController = createPluginController(pluginService);
   return createPluginRoutes(pluginController);

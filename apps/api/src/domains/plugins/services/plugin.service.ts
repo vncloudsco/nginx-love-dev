@@ -3,17 +3,14 @@
  * Business logic cho plugin management
  */
 
-import { PrismaClient } from '@prisma/client';
-import { PluginManager } from '../../../shared/plugin-sdk';
+import { PluginManagerV2 } from '../../../shared/plugin-sdk';
 import { PluginInstallOptions, PluginMetadata } from '../../../shared/plugin-sdk/types';
 import logger from '../../../utils/logger';
 
-const prisma = new PrismaClient();
-
 export class PluginService {
-  private pluginManager: PluginManager;
+  private pluginManager: PluginManagerV2;
 
-  constructor(pluginManager: PluginManager) {
+  constructor(pluginManager: PluginManagerV2) {
     this.pluginManager = pluginManager;
   }
 
@@ -169,6 +166,6 @@ export class PluginService {
   }
 }
 
-export const createPluginService = (pluginManager: PluginManager) => {
+export const createPluginService = (pluginManager: PluginManagerV2) => {
   return new PluginService(pluginManager);
 };
