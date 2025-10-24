@@ -225,7 +225,8 @@ export function parseModSecLogLine(line: string, index: number): ParsedLogEntry 
       message: `ModSecurity: ${message}`,
       fullMessage, // Complete log without truncation
       ip,
-      hostname, // Target domain/hostname
+      domain: hostname, // Use domain field for consistency with nginx logs
+      hostname, // Keep hostname for backward compatibility
       method,
       path,
       statusCode,

@@ -74,6 +74,11 @@ import {
   useLogs
 } from "@/queries/logs.query-options";
 import { LogDetailsDialog } from "@/components/logs/LogDetailsDialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Component for fast-loading statistics data
 const LogStatistics = () => {
@@ -389,13 +394,28 @@ const LogEntries = ({
       header: "Details",
       cell: ({ row }) => {
         const log = row.original;
+        const pathText = log.method && log.path ? `${log.method} ${log.path}` : null;
+        const tagsText = log.tags && log.tags.length > 0 ? log.tags.join(', ') : null;
+        const uriText = log.uri;
+        
         return (
-          <div className="text-xs text-muted-foreground space-y-1">
+          <div className="text-xs text-muted-foreground space-y-1 max-w-xs">
             {log.ip && <div>IP: {log.ip}</div>}
-            {log.method && log.path && (
-              <div>
-                {log.method} {log.path}
-              </div>
+            {pathText && (
+              pathText.length > 40 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="truncate cursor-help">
+                      {pathText.substring(0, 40)}...
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md break-all">
+                    {pathText}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <div>{pathText}</div>
+              )
             )}
             {log.statusCode && <div>Status: {log.statusCode}</div>}
             {log.responseTime && <div>RT: {log.responseTime}ms</div>}
@@ -406,12 +426,38 @@ const LogEntries = ({
             {log.severity && (
               <div>Severity: {log.severity}</div>
             )}
-            {log.tags && log.tags.length > 0 && (
-              <div className="max-w-xs">
-                Tags: {log.tags.join(', ')}
-              </div>
+            {tagsText && (
+              tagsText.length > 40 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="truncate cursor-help">
+                      Tags: {tagsText.substring(0, 40)}...
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md break-all">
+                    Tags: {tagsText}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <div>Tags: {tagsText}</div>
+              )
             )}
-            {log.uri && <div>URI: {log.uri}</div>}
+            {uriText && (
+              uriText.length > 40 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="truncate cursor-help">
+                      URI: {uriText.substring(0, 40)}...
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md break-all">
+                    URI: {uriText}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <div>URI: {uriText}</div>
+              )
+            )}
           </div>
         );
       },
@@ -651,31 +697,78 @@ const LogEntries = ({
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground space-y-1">
-                      {log.ip && <div>IP: {log.ip}</div>}
-                      {log.method && log.path && (
-                        <div>
-                          {log.method} {log.path}
-                        </div>
-                      )}
-                      {log.statusCode && <div>Status: {log.statusCode}</div>}
-                      {log.responseTime && (
-                        <div>RT: {log.responseTime}ms</div>
-                      )}
-                      {/* ModSecurity specific details */}
-                      {log.ruleId && (
-                        <div className="font-semibold text-red-600">
-                          Rule ID: {log.ruleId}
-                        </div>
-                      )}
-                      {log.severity && (
-                        <div>Severity: {log.severity}</div>
-                      )}
-                      {log.tags && log.tags.length > 0 && (
-                        <div className="max-w-xs">
-                          Tags: {log.tags.join(', ')}
-                        </div>
-                      )}
-                      {log.uri && <div>URI: {log.uri}</div>}
+                      {(() => {
+                        const pathText = log.method && log.path ? `${log.method} ${log.path}` : null;
+                        const tagsText = log.tags && log.tags.length > 0 ? log.tags.join(', ') : null;
+                        const uriText = log.uri;
+                        
+                        return (
+                          <div className="max-w-xs">
+                            {log.ip && <div>IP: {log.ip}</div>}
+                            {pathText && (
+                              pathText.length > 40 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="truncate cursor-help">
+                                      {pathText.substring(0, 40)}...
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-md break-all">
+                                    {pathText}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <div>{pathText}</div>
+                              )
+                            )}
+                            {log.statusCode && <div>Status: {log.statusCode}</div>}
+                            {log.responseTime && (
+                              <div>RT: {log.responseTime}ms</div>
+                            )}
+                            {/* ModSecurity specific details */}
+                            {log.ruleId && (
+                              <div className="font-semibold text-red-600">
+                                Rule ID: {log.ruleId}
+                              </div>
+                            )}
+                            {log.severity && (
+                              <div>Severity: {log.severity}</div>
+                            )}
+                            {tagsText && (
+                              tagsText.length > 40 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="truncate cursor-help">
+                                      Tags: {tagsText.substring(0, 40)}...
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-md break-all">
+                                    Tags: {tagsText}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <div>Tags: {tagsText}</div>
+                              )
+                            )}
+                            {uriText && (
+                              uriText.length > 40 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="truncate cursor-help">
+                                      URI: {uriText.substring(0, 40)}...
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-md break-all">
+                                    URI: {uriText}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <div>URI: {uriText}</div>
+                              )
+                            )}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))
