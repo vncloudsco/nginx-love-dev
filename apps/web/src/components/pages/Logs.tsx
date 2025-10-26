@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ColumnDef,
@@ -74,6 +74,11 @@ import {
   useLogs
 } from "@/queries/logs.query-options";
 import { LogDetailsDialog } from "@/components/logs/LogDetailsDialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Component for fast-loading statistics data
 const LogStatistics = () => {
@@ -148,6 +153,8 @@ const LogEntries = ({
   level,
   type,
   domain,
+  ruleId,
+  uniqueId,
   setPage,
   setLimit,
   sorting,
@@ -171,6 +178,8 @@ const LogEntries = ({
   level: string;
   type: string;
   domain: string;
+  ruleId: string;
+  uniqueId: string;
   setPage: (page: number) => void;
   setLimit: (limit: number) => void;
   sorting: SortingState;
@@ -189,24 +198,50 @@ const LogEntries = ({
   setSelectedLog: (log: LogEntry | null) => void;
 }) => {
   const [isPageChanging, setIsPageChanging] = useState(false);
-  // Build query parameters
-  const params: any = {
-    page,
-    limit,
-  };
+  
+  // Stabilize uniqueId to prevent it from changing reference
+  const stableUniqueId = useMemo(() => {
+    if (!uniqueId) return "";
+    // Ensure it's always a string and doesn't change unless the actual value changes
+    const result = String(uniqueId);
+    console.log('[LogEntries] uniqueId stabilization:', {
+      original: uniqueId,
+      originalType: typeof uniqueId,
+      result: result,
+      resultType: typeof result,
+      equal: uniqueId === result
+    });
+    return result;
+  }, [uniqueId]);
 
-  if (level !== "all") {
-    params.level = level;
-  }
-  if (type !== "all") {
-    params.type = type;
-  }
-  if (domain !== "all") {
-    params.domain = domain;
-  }
-  if (search) {
-    params.search = search;
-  }
+  // Build query parameters - memoized to prevent unnecessary refetches
+  const params = useMemo(() => {
+    const p: any = {
+      page,
+      limit,
+    };
+
+    if (level !== "all") {
+      p.level = level;
+    }
+    if (type !== "all") {
+      p.type = type;
+    }
+    if (domain !== "all") {
+      p.domain = domain;
+    }
+    if (search) {
+      p.search = search;
+    }
+    if (ruleId) {
+      p.ruleId = ruleId;
+    }
+    if (stableUniqueId) {
+      p.uniqueId = stableUniqueId;
+    }
+    
+    return p;
+  }, [page, limit, level, type, domain, search, ruleId, stableUniqueId]);
 
   // Use regular query instead of suspense query for better control
   const { data: logsResponse, refetch, isFetching, isLoading } = useLogs(params);
@@ -280,6 +315,12 @@ const LogEntries = ({
       }
       if (search) {
         params.search = search;
+      }
+      if (ruleId) {
+        params.ruleId = ruleId;
+      }
+      if (uniqueId) {
+        params.uniqueId = uniqueId;
       }
 
       await downloadLogs(params);
@@ -389,13 +430,28 @@ const LogEntries = ({
       header: "Details",
       cell: ({ row }) => {
         const log = row.original;
+        const pathText = log.method && log.path ? `${log.method} ${log.path}` : null;
+        const tagsText = log.tags && log.tags.length > 0 ? log.tags.join(', ') : null;
+        const uriText = log.uri;
+        
         return (
-          <div className="text-xs text-muted-foreground space-y-1">
+          <div className="text-xs text-muted-foreground space-y-1 max-w-xs">
             {log.ip && <div>IP: {log.ip}</div>}
-            {log.method && log.path && (
-              <div>
-                {log.method} {log.path}
-              </div>
+            {pathText && (
+              pathText.length > 40 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="truncate cursor-help">
+                      {pathText.substring(0, 40)}...
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md break-all">
+                    {pathText}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <div>{pathText}</div>
+              )
             )}
             {log.statusCode && <div>Status: {log.statusCode}</div>}
             {log.responseTime && <div>RT: {log.responseTime}ms</div>}
@@ -406,12 +462,38 @@ const LogEntries = ({
             {log.severity && (
               <div>Severity: {log.severity}</div>
             )}
-            {log.tags && log.tags.length > 0 && (
-              <div className="max-w-xs">
-                Tags: {log.tags.join(', ')}
-              </div>
+            {tagsText && (
+              tagsText.length > 40 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="truncate cursor-help">
+                      Tags: {tagsText.substring(0, 40)}...
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md break-all">
+                    Tags: {tagsText}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <div>Tags: {tagsText}</div>
+              )
             )}
-            {log.uri && <div>URI: {log.uri}</div>}
+            {uriText && (
+              uriText.length > 40 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="truncate cursor-help">
+                      URI: {uriText.substring(0, 40)}...
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md break-all">
+                    URI: {uriText}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <div>URI: {uriText}</div>
+              )
+            )}
           </div>
         );
       },
@@ -454,16 +536,15 @@ const LogEntries = ({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {/* Filters */}
-        <div className="flex flex-col gap-4 mb-6 lg:flex-row lg:items-center">
-          {/* Search */}
-          <div className="relative flex-1">
+        {/* Filters - All in one row */}
+        <div className="flex flex-col gap-3 mb-6 lg:flex-row lg:items-center lg:flex-wrap">
+          {/* General Search */}
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search logs..."
               value={search}
               onChange={(e) => {
-                // This will be handled by the parent component
                 const event = new CustomEvent('searchChange', { detail: e.target.value });
                 window.dispatchEvent(event);
               }}
@@ -471,88 +552,131 @@ const LogEntries = ({
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2">
-            <Select
-              value={domain}
-              onValueChange={(value) => {
-                // This will be handled by the parent component
-                const event = new CustomEvent('domainChange', { detail: value });
+          {/* ModSecurity Rule ID */}
+          <div className="relative w-full lg:w-[180px]">
+            <Input
+              placeholder="Rule ID..."
+              value={ruleId}
+              onChange={(e) => {
+                const event = new CustomEvent('ruleIdChange', { detail: e.target.value });
                 window.dispatchEvent(event);
               }}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by domain" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Domains</SelectItem>
-                {domains.map((domain) => (
-                  <SelectItem key={domain.name} value={domain.name}>
-                    {domain.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={level} onValueChange={(value) => {
-              // This will be handled by the parent component
-              const event = new CustomEvent('levelChange', { detail: value });
-              window.dispatchEvent(event);
-            }}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Filter by level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Levels</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={type} onValueChange={(value) => {
-              // This will be handled by the parent component
-              const event = new CustomEvent('typeChange', { detail: value });
-              window.dispatchEvent(event);
-            }}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Filter by type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="access">Access</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-                <SelectItem value="system">System</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto">
-                  Columns <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {table
-                  .getAllColumns()
-                  .filter((column) => column.getCanHide())
-                  .map((column) => {
-                    return (
-                      <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) =>
-                          column.toggleVisibility(!!value)
-                        }
-                      >
-                        {column.id}
-                      </DropdownMenuCheckboxItem>
-                    );
-                  })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            />
           </div>
+
+          {/* ModSecurity Unique ID */}
+          <div className="relative w-full lg:w-[180px]">
+            <Input
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              spellCheck="false"
+              placeholder="Unique ID..."
+              value={uniqueId || ""}
+              onChange={(e) => {
+                console.log('[Input onChange] uniqueId:', {
+                  value: e.target.value,
+                  type: typeof e.target.value,
+                  length: e.target.value.length
+                });
+                const event = new CustomEvent('uniqueIdChange', { detail: e.target.value });
+                window.dispatchEvent(event);
+              }}
+              onPaste={(e) => {
+                // Prevent any browser formatting on paste
+                e.preventDefault();
+                const text = e.clipboardData.getData('text/plain');
+                console.log('[Input onPaste] uniqueId:', {
+                  text: text,
+                  type: typeof text,
+                  length: text.length
+                });
+                const event = new CustomEvent('uniqueIdChange', { detail: text });
+                window.dispatchEvent(event);
+              }}
+            />
+          </div>
+
+          {/* Domain Filter */}
+          <Select
+            value={domain}
+            onValueChange={(value) => {
+              const event = new CustomEvent('domainChange', { detail: value });
+              window.dispatchEvent(event);
+            }}
+          >
+            <SelectTrigger className="w-full lg:w-[160px]">
+              <SelectValue placeholder="Domain" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Domains</SelectItem>
+              {domains.map((domain) => (
+                <SelectItem key={domain.name} value={domain.name}>
+                  {domain.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Level Filter */}
+          <Select value={level} onValueChange={(value) => {
+            const event = new CustomEvent('levelChange', { detail: value });
+            window.dispatchEvent(event);
+          }}>
+            <SelectTrigger className="w-full lg:w-[120px]">
+              <SelectValue placeholder="Level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Levels</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="warning">Warning</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Type Filter */}
+          <Select value={type} onValueChange={(value) => {
+            const event = new CustomEvent('typeChange', { detail: value });
+            window.dispatchEvent(event);
+          }}>
+            <SelectTrigger className="w-full lg:w-[120px]">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="access">Access</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+              <SelectItem value="system">System</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Column Visibility */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                Columns <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {table
+                .getAllColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => {
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      className="capitalize"
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(value) =>
+                        column.toggleVisibility(!!value)
+                      }
+                    >
+                      {column.id}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="rounded-md border">
           <Table>
@@ -651,31 +775,78 @@ const LogEntries = ({
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground space-y-1">
-                      {log.ip && <div>IP: {log.ip}</div>}
-                      {log.method && log.path && (
-                        <div>
-                          {log.method} {log.path}
-                        </div>
-                      )}
-                      {log.statusCode && <div>Status: {log.statusCode}</div>}
-                      {log.responseTime && (
-                        <div>RT: {log.responseTime}ms</div>
-                      )}
-                      {/* ModSecurity specific details */}
-                      {log.ruleId && (
-                        <div className="font-semibold text-red-600">
-                          Rule ID: {log.ruleId}
-                        </div>
-                      )}
-                      {log.severity && (
-                        <div>Severity: {log.severity}</div>
-                      )}
-                      {log.tags && log.tags.length > 0 && (
-                        <div className="max-w-xs">
-                          Tags: {log.tags.join(', ')}
-                        </div>
-                      )}
-                      {log.uri && <div>URI: {log.uri}</div>}
+                      {(() => {
+                        const pathText = log.method && log.path ? `${log.method} ${log.path}` : null;
+                        const tagsText = log.tags && log.tags.length > 0 ? log.tags.join(', ') : null;
+                        const uriText = log.uri;
+                        
+                        return (
+                          <div className="max-w-xs">
+                            {log.ip && <div>IP: {log.ip}</div>}
+                            {pathText && (
+                              pathText.length > 40 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="truncate cursor-help">
+                                      {pathText.substring(0, 40)}...
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-md break-all">
+                                    {pathText}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <div>{pathText}</div>
+                              )
+                            )}
+                            {log.statusCode && <div>Status: {log.statusCode}</div>}
+                            {log.responseTime && (
+                              <div>RT: {log.responseTime}ms</div>
+                            )}
+                            {/* ModSecurity specific details */}
+                            {log.ruleId && (
+                              <div className="font-semibold text-red-600">
+                                Rule ID: {log.ruleId}
+                              </div>
+                            )}
+                            {log.severity && (
+                              <div>Severity: {log.severity}</div>
+                            )}
+                            {tagsText && (
+                              tagsText.length > 40 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="truncate cursor-help">
+                                      Tags: {tagsText.substring(0, 40)}...
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-md break-all">
+                                    Tags: {tagsText}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <div>Tags: {tagsText}</div>
+                              )
+                            )}
+                            {uriText && (
+                              uriText.length > 40 ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="truncate cursor-help">
+                                      URI: {uriText.substring(0, 40)}...
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-md break-all">
+                                    URI: {uriText}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <div>URI: {uriText}</div>
+                              )
+                            )}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))
@@ -799,6 +970,34 @@ const Logs = () => {
     "domain",
     parseAsString.withDefault("all")
   );
+  const [ruleId, setRuleId] = useQueryState(
+    "ruleId",
+    parseAsString.withDefault("")
+  );
+  
+  // Don't use useQueryState for uniqueId - it causes precision loss
+  // Use manual URL sync instead
+  const [uniqueId, setUniqueIdState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('uniqueId') || "";
+    }
+    return "";
+  });
+  
+  const setUniqueId = useCallback((value: string) => {
+    setUniqueIdState(value);
+    // Manually update URL without using nuqs
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (value) {
+        url.searchParams.set('uniqueId', value);
+      } else {
+        url.searchParams.delete('uniqueId');
+      }
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
 
   // Table state
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -812,19 +1011,25 @@ const Logs = () => {
     const handleDomainChange = (e: any) => setDomain(e.detail);
     const handleLevelChange = (e: any) => setLevel(e.detail);
     const handleTypeChange = (e: any) => setType(e.detail);
+    const handleRuleIdChange = (e: any) => setRuleId(e.detail);
+    const handleUniqueIdChange = (e: any) => setUniqueId(e.detail);
 
     window.addEventListener('searchChange', handleSearchChange);
     window.addEventListener('domainChange', handleDomainChange);
     window.addEventListener('levelChange', handleLevelChange);
     window.addEventListener('typeChange', handleTypeChange);
+    window.addEventListener('ruleIdChange', handleRuleIdChange);
+    window.addEventListener('uniqueIdChange', handleUniqueIdChange);
 
     return () => {
       window.removeEventListener('searchChange', handleSearchChange);
       window.removeEventListener('domainChange', handleDomainChange);
       window.removeEventListener('levelChange', handleLevelChange);
       window.removeEventListener('typeChange', handleTypeChange);
+      window.removeEventListener('ruleIdChange', handleRuleIdChange);
+      window.removeEventListener('uniqueIdChange', handleUniqueIdChange);
     };
-  }, [setSearch, setDomain, setLevel, setType]);
+  }, [setSearch, setDomain, setLevel, setType, setRuleId, setUniqueId]);
 
 
   const handleDownloadLogs = async () => {
@@ -842,6 +1047,12 @@ const Logs = () => {
       }
       if (search) {
         params.search = search;
+      }
+      if (ruleId) {
+        params.ruleId = ruleId;
+      }
+      if (uniqueId) {
+        params.uniqueId = uniqueId;
       }
 
       await downloadLogs(params);
@@ -933,6 +1144,8 @@ const Logs = () => {
         level={level}
         type={type}
         domain={domain}
+        ruleId={ruleId}
+        uniqueId={uniqueId || ""}
         setPage={setPage}
         setLimit={setLimit}
         sorting={sorting}

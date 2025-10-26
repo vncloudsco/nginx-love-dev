@@ -11,7 +11,7 @@ export const getLogs = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { limit = '10', page = '1', level, type, search, domain } = req.query;
+    const { limit = '10', page = '1', level, type, search, domain, ruleId, uniqueId } = req.query;
 
     // Parse and validate parameters
     const limitNum = Math.min(
@@ -27,6 +27,8 @@ export const getLogs = async (
       type: type as string,
       search: search as string,
       domain: domain as string,
+      ruleId: ruleId as string,
+      uniqueId: uniqueId as string,
     });
 
     // Calculate pagination info
@@ -94,7 +96,7 @@ export const downloadLogs = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { limit = '1000', level, type, search, domain } = req.query;
+    const { limit = '1000', level, type, search, domain, ruleId, uniqueId } = req.query;
 
     // Parse and validate parameters
     const limitNum = Math.min(
@@ -108,6 +110,8 @@ export const downloadLogs = async (
       type: type as string,
       search: search as string,
       domain: domain as string,
+      ruleId: ruleId as string,
+      uniqueId: uniqueId as string,
     });
 
     logger.info(
@@ -133,6 +137,8 @@ export const downloadLogs = async (
           type,
           search,
           domain,
+          ruleId,
+          uniqueId,
         },
       },
     });
