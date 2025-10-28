@@ -283,6 +283,7 @@ export class DashboardAnalyticsService {
           count: stats.count,
           severity: stats.severity,
           lastOccurred: stats.lastOccurred,
+          timestamp: stats.lastOccurred,
           ruleIds: Array.from(stats.ruleIds),
         }))
         .sort((a, b) => b.count - a.count)
