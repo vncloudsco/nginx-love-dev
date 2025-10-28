@@ -30,6 +30,7 @@ export interface ParsedLogEntry {
 
 export interface LogFilterOptions {
   limit?: number;
+  offset?: number;
   level?: string;
   type?: string;
   search?: string;
