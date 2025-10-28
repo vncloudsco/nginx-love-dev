@@ -1,8 +1,32 @@
 import api from './api';
 
-// Request trend data point
-export interface RequestTrendDataPoint {
+/**
+ * Dashboard Analytics Types
+ */
+
+// HTTP Status codes mapping type
+type HttpStatusCodes = 200 | 301 | 302 | 400 | 403 | 404 | 500 | 502 | 503;
+
+// Base statistics interface for count-based metrics
+interface BaseCountStats {
+  count: number;
+}
+
+// Base timestamp interface
+interface TimestampedEntry {
   timestamp: string;
+}
+
+// Request metrics with min/max/avg pattern
+interface RequestMetrics {
+  requestCount: number;
+  avgResponseTime: number;
+  maxResponseTime: number;
+  minResponseTime: number;
+}
+
+// Request trend data point with dynamic status codes
+export interface RequestTrendDataPoint extends TimestampedEntry {
   total: number;
   status200: number;
   status301: number;
@@ -17,29 +41,23 @@ export interface RequestTrendDataPoint {
 }
 
 // Slow request entry
-export interface SlowRequestEntry {
+export interface SlowRequestEntry extends RequestMetrics {
   path: string;
-  avgResponseTime: number;
-  requestCount: number;
-  maxResponseTime: number;
-  minResponseTime: number;
 }
 
 // Attack type statistics
-export interface AttackTypeStats {
+export interface AttackTypeStats extends BaseCountStats {
   attackType: string;
-  count: number;
   severity: string;
   lastOccurred: string;
   ruleIds: string[];
 }
 
 // Latest attack/security event
-export interface LatestAttackEntry {
+export interface LatestAttackEntry extends TimestampedEntry {
   id: string;
-  timestamp: string;
   attackerIp: string;
-  domain?: string; // Target domain/hostname
+  domain?: string;
   urlPath: string;
   attackType: string;
   ruleId?: string;
@@ -48,7 +66,7 @@ export interface LatestAttackEntry {
   logId: string;
 }
 
-// IP analytics entry
+// IP analytics entry with count-based metrics
 export interface IpAnalyticsEntry {
   ip: string;
   requestCount: number;
@@ -66,9 +84,12 @@ export interface AttackRatioStats {
   attackPercentage: number;
 }
 
+// Period type for analytics
+export type AnalyticsPeriod = 'day' | 'week' | 'month';
+
 // Request analytics response
 export interface RequestAnalyticsResponse {
-  period: 'day' | 'week' | 'month';
+  period: AnalyticsPeriod;
   topIps: IpAnalyticsEntry[];
   totalRequests: number;
   uniqueIps: number;
@@ -85,81 +106,70 @@ export interface DashboardAnalyticsResponse {
 }
 
 /**
- * Get request trend analytics (auto-refresh every 5s)
+ * Generic API caller to reduce duplication
  */
-export const getRequestTrend = async (intervalSeconds: number = 5): Promise<RequestTrendDataPoint[]> => {
-  const response = await api.get('/dashboard/analytics/request-trend', {
-    params: { interval: intervalSeconds },
-  });
+const fetchAnalytics = async <T>(
+  endpoint: string,
+  params?: Record<string, any>
+): Promise<T> => {
+  const response = await api.get(`/dashboard/analytics/${endpoint}`, { params });
   return response.data.data;
 };
 
 /**
- * Get slow requests from performance monitoring
+ * Dashboard Analytics Service
  */
-export const getSlowRequests = async (limit: number = 10): Promise<SlowRequestEntry[]> => {
-  const response = await api.get('/dashboard/analytics/slow-requests', {
-    params: { limit },
-  });
-  return response.data.data;
-};
-
-/**
- * Get latest attack statistics (top 5 in 24h)
- */
-export const getLatestAttackStats = async (limit: number = 5): Promise<AttackTypeStats[]> => {
-  const response = await api.get('/dashboard/analytics/latest-attacks', {
-    params: { limit },
-  });
-  return response.data.data;
-};
-
-/**
- * Get latest security news/events
- */
-export const getLatestNews = async (limit: number = 20): Promise<LatestAttackEntry[]> => {
-  const response = await api.get('/dashboard/analytics/latest-news', {
-    params: { limit },
-  });
-  return response.data.data;
-};
-
-/**
- * Get request analytics (top IPs by period)
- */
-export const getRequestAnalytics = async (
-  period: 'day' | 'week' | 'month' = 'day'
-): Promise<RequestAnalyticsResponse> => {
-  const response = await api.get('/dashboard/analytics/request-analytics', {
-    params: { period },
-  });
-  return response.data.data;
-};
-
-/**
- * Get attack vs normal request ratio
- */
-export const getAttackRatio = async (): Promise<AttackRatioStats> => {
-  const response = await api.get('/dashboard/analytics/attack-ratio');
-  return response.data.data;
-};
-
-/**
- * Get complete dashboard analytics (all in one)
- */
-export const getDashboardAnalytics = async (): Promise<DashboardAnalyticsResponse> => {
-  const response = await api.get('/dashboard/analytics');
-  return response.data.data;
-};
-
 export const dashboardAnalyticsService = {
-  getRequestTrend,
-  getSlowRequests,
-  getLatestAttackStats,
-  getLatestNews,
-  getRequestAnalytics,
-  getAttackRatio,
-  getDashboardAnalytics,
+  /**
+   * Get request trend analytics (auto-refresh every 5s)
+   */
+  getRequestTrend: (intervalSeconds: number = 5) =>
+    fetchAnalytics<RequestTrendDataPoint[]>('request-trend', { interval: intervalSeconds }),
+
+  /**
+   * Get slow requests from performance monitoring
+   */
+  getSlowRequests: (limit: number = 10) =>
+    fetchAnalytics<SlowRequestEntry[]>('slow-requests', { limit }),
+
+  /**
+   * Get latest attack statistics (top 5 in 24h)
+   */
+  getLatestAttackStats: (limit: number = 5) =>
+    fetchAnalytics<AttackTypeStats[]>('latest-attacks', { limit }),
+
+  /**
+   * Get latest security news/events
+   */
+  getLatestNews: (limit: number = 20) =>
+    fetchAnalytics<LatestAttackEntry[]>('latest-news', { limit }),
+
+  /**
+   * Get request analytics (top IPs by period)
+   */
+  getRequestAnalytics: (period: AnalyticsPeriod = 'day') =>
+    fetchAnalytics<RequestAnalyticsResponse>('request-analytics', { period }),
+
+  /**
+   * Get attack vs normal request ratio
+   */
+  getAttackRatio: () =>
+    fetchAnalytics<AttackRatioStats>('attack-ratio'),
+
+  /**
+   * Get complete dashboard analytics (all in one)
+   */
+  getDashboardAnalytics: () =>
+    fetchAnalytics<DashboardAnalyticsResponse>(''),
 };
+
+// Export individual functions for backward compatibility
+export const getRequestTrend = dashboardAnalyticsService.getRequestTrend;
+export const getSlowRequests = dashboardAnalyticsService.getSlowRequests;
+export const getLatestAttackStats = dashboardAnalyticsService.getLatestAttackStats;
+export const getLatestNews = dashboardAnalyticsService.getLatestNews;
+export const getRequestAnalytics = dashboardAnalyticsService.getRequestAnalytics;
+export const getAttackRatio = dashboardAnalyticsService.getAttackRatio;
+export const getDashboardAnalytics = dashboardAnalyticsService.getDashboardAnalytics;
 
 export default dashboardAnalyticsService;

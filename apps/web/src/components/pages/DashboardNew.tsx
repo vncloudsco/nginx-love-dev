@@ -61,6 +61,61 @@ import {
 } from "@/queries";
 import { SkeletonStatsCard, SkeletonChart, SkeletonTable } from "@/components/ui/skeletons";
 
+// Constants for status codes and colors
+const STATUS_CODES_CONFIG = [
+  { key: "status200", color: "#22c55e", label: "dashboard.status200" },
+  { key: "status301", color: "#3b82f6", label: "dashboard.status301" },
+  { key: "status302", color: "#06b6d4", label: "dashboard.status302" },
+  { key: "status400", color: "#f59e0b", label: "dashboard.status400" },
+  { key: "status403", color: "#f97316", label: "dashboard.status403" },
+  { key: "status404", color: "#eab308", label: "dashboard.status404" },
+  { key: "status500", color: "#ef4444", label: "dashboard.status500" },
+  { key: "status502", color: "#dc2626", label: "dashboard.status502" },
+  { key: "status503", color: "#b91c1c", label: "dashboard.status503" },
+] as const;
+
+// Helper function to format time
+const formatTime = (date: Date) => 
+  `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+
+// Helper function to get attack percentage color
+const getAttackPercentageColor = (percentage: number) => {
+  if (percentage > 10) return "text-destructive";
+  if (percentage > 5) return "text-warning";
+  return "text-success";
+};
+
+// Helper function to get severity badge variant
+const getSeverityVariant = (severity: string): "destructive" | "default" => {
+  return severity === "CRITICAL" || severity === "2" ? "destructive" : "default";
+};
+
+// Reusable Empty State Component
+const EmptyState = ({ message }: { message: string }) => (
+  <div className="text-center py-8 text-muted-foreground text-sm">
+    {message}
+  </div>
+);
+
+// Reusable Card Header with Icon
+const CardHeaderWithIcon = ({ 
+  icon: Icon, 
+  title, 
+  description 
+}: { 
+  icon: any; 
+  title: string; 
+  description?: string;
+}) => (
+  <CardHeader>
+    <CardTitle className="flex items-center gap-2">
+      <Icon className="h-5 w-5" />
+      {title}
+    </CardTitle>
+    {description && <CardDescription>{description}</CardDescription>}
+  </CardHeader>
+);
+
 // Component for stats overview
 function DashboardStatsOverview() {
   const { t } = useTranslation();
@@ -114,8 +169,7 @@ function DashboardStatsOverview() {
           </CardHeader>
           <CardContent>
             <p className="text-sm">
-              You have <strong>{unacknowledgedAlerts}</strong> unacknowledged
-              alerts
+              You have <strong>{unacknowledgedAlerts}</strong> unacknowledged alerts
               {criticalAlerts > 0 && `, including ${criticalAlerts} critical`}.
             </p>
           </CardContent>
@@ -126,16 +180,12 @@ function DashboardStatsOverview() {
         {statsCards.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {stat.title}
-              </CardTitle>
+              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
               <stat.icon className={`h-4 w-4 ${stat.color}`} />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">
-                {stat.description}
-              </p>
+              <p className="text-xs text-muted-foreground">{stat.description}</p>
             </CardContent>
           </Card>
         ))}
@@ -148,6 +198,14 @@ function DashboardStatsOverview() {
 function RequestTrendChart() {
   const { t } = useTranslation();
   const { data: trendData } = useSuspenseRequestTrend(5);
+
+  // Generate chart config dynamically
+  const chartConfig = Object.fromEntries(
+    STATUS_CODES_CONFIG.map(({ key, color, label }) => [
+      key,
+      { label: t(label), color }
+    ])
+  );
 
   return (
     <Card>
@@ -164,121 +222,39 @@ function RequestTrendChart() {
       </CardHeader>
       <CardContent>
         {trendData && trendData.length > 0 ? (
-          <ChartContainer
-            config={{
-              status200: { label: t("dashboard.status200"), color: "#22c55e" },
-              status301: { label: t("dashboard.status301"), color: "#3b82f6" },
-              status302: { label: t("dashboard.status302"), color: "#06b6d4" },
-              status400: { label: t("dashboard.status400"), color: "#f59e0b" },
-              status403: { label: t("dashboard.status403"), color: "#f97316" },
-              status404: { label: t("dashboard.status404"), color: "#eab308" },
-              status500: { label: t("dashboard.status500"), color: "#ef4444" },
-              status502: { label: t("dashboard.status502"), color: "#dc2626" },
-              status503: { label: t("dashboard.status503"), color: "#b91c1c" },
-            }}
-            className="h-[280px] w-full"
-          >
+          <ChartContainer config={chartConfig} className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="timestamp"
-                  tickFormatter={(value) => {
-                    const date = new Date(value);
-                    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-                  }}
+                  tickFormatter={(value) => formatTime(new Date(value))}
                 />
                 <YAxis />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      labelFormatter={(label: any) => {
-                        const date = new Date(label);
-                        return date.toLocaleString();
-                      }}
+                      labelFormatter={(label: any) => new Date(label).toLocaleString()}
                     />
                   }
                 />
                 <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="status200"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status200")}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="status301"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status301")}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="status302"
-                  stroke="#06b6d4"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status302")}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="status400"
-                  stroke="#f59e0b"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status400")}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="status403"
-                  stroke="#f97316"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status403")}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="status404"
-                  stroke="#eab308"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status404")}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="status500"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status500")}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="status502"
-                  stroke="#dc2626"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status502")}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="status503"
-                  stroke="#b91c1c"
-                  strokeWidth={2}
-                  dot={false}
-                  name={t("dashboard.status503")}
-                />
+                {STATUS_CODES_CONFIG.map(({ key, color, label }) => (
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    stroke={color}
+                    strokeWidth={2}
+                    dot={false}
+                    name={t(label)}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           </ChartContainer>
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            {t("dashboard.noData")}
-          </div>
+          <EmptyState message={t("dashboard.noData")} />
         )}
       </CardContent>
     </Card>
@@ -292,13 +268,11 @@ function SlowRequestsCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Clock className="h-5 w-5" />
-          {t("dashboard.slowRequests")}
-        </CardTitle>
-        <CardDescription>{t("dashboard.slowRequestsDesc")}</CardDescription>
-      </CardHeader>
+      <CardHeaderWithIcon
+        icon={Clock}
+        title={t("dashboard.slowRequests")}
+        description={t("dashboard.slowRequestsDesc")}
+      />
       <CardContent>
         {slowRequests && slowRequests.length > 0 ? (
           <div className="space-y-2">
@@ -320,9 +294,7 @@ function SlowRequestsCard() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground text-sm">
-            {t("dashboard.noData")}
-          </div>
+          <EmptyState message={t("dashboard.noData")} />
         )}
       </CardContent>
     </Card>
@@ -334,53 +306,46 @@ function AttackRatioCard() {
   const { t } = useTranslation();
   const { data: attackRatio } = useSuspenseAttackRatio();
 
+  const metrics = [
+    { label: "dashboard.attackRequests", value: attackRatio?.attackRequests, variant: "destructive" as const },
+    { label: "dashboard.normalRequests", value: attackRatio?.normalRequests, variant: "secondary" as const },
+  ];
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Shield className="h-5 w-5" />
-          {t("dashboard.attackRatio")}
-        </CardTitle>
-        <CardDescription>{t("dashboard.attackRatioDesc")}</CardDescription>
-      </CardHeader>
+      <CardHeaderWithIcon
+        icon={Shield}
+        title={t("dashboard.attackRatio")}
+        description={t("dashboard.attackRatioDesc")}
+      />
       <CardContent>
         {attackRatio ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">{t("dashboard.totalRequests")}</span>
-              <span className="text-2xl font-bold">{attackRatio.totalRequests.toLocaleString()}</span>
+              <span className="text-2xl font-bold">
+                {attackRatio.totalRequests.toLocaleString()}
+              </span>
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">{t("dashboard.attackRequests")}</span>
-                <Badge variant="destructive">{attackRatio.attackRequests.toLocaleString()}</Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">{t("dashboard.normalRequests")}</span>
-                <Badge variant="secondary">{attackRatio.normalRequests.toLocaleString()}</Badge>
-              </div>
+              {metrics.map(({ label, value, variant }) => (
+                <div key={label} className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">{t(label)}</span>
+                  <Badge variant={variant}>{value?.toLocaleString()}</Badge>
+                </div>
+              ))}
             </div>
             <div className="pt-4 border-t">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{t("dashboard.attackPercentage")}</span>
-                <span
-                  className={`text-xl font-bold ${
-                    attackRatio.attackPercentage > 10
-                      ? "text-destructive"
-                      : attackRatio.attackPercentage > 5
-                      ? "text-warning"
-                      : "text-success"
-                  }`}
-                >
+                <span className={`text-xl font-bold ${getAttackPercentageColor(attackRatio.attackPercentage)}`}>
                   {attackRatio.attackPercentage.toFixed(2)}%
                 </span>
               </div>
             </div>
           </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground text-sm">
-            {t("dashboard.noData")}
-          </div>
+          <EmptyState message={t("dashboard.noData")} />
         )}
       </CardContent>
     </Card>
@@ -394,13 +359,11 @@ function LatestAttacksCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5" />
-          {t("dashboard.latestAttacks")}
-        </CardTitle>
-        <CardDescription>{t("dashboard.latestAttacksDesc")}</CardDescription>
-      </CardHeader>
+      <CardHeaderWithIcon
+        icon={AlertTriangle}
+        title={t("dashboard.latestAttacks")}
+        description={t("dashboard.latestAttacksDesc")}
+      />
       <CardContent>
         {attacks && attacks.length > 0 ? (
           <div className="space-y-3">
@@ -415,24 +378,14 @@ function LatestAttacksCard() {
                     Last: {new Date(attack.lastOccurred).toLocaleString()}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={
-                      attack.severity === "CRITICAL" || attack.severity === "2"
-                        ? "destructive"
-                        : "default"
-                    }
-                  >
-                    {attack.count}
-                  </Badge>
-                </div>
+                <Badge variant={getSeverityVariant(attack.severity)}>
+                  {attack.count}
+                </Badge>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground text-sm">
-            {t("dashboard.noData")}
-          </div>
+          <EmptyState message={t("dashboard.noData")} />
         )}
       </CardContent>
     </Card>
@@ -444,27 +397,40 @@ function LatestNewsTable() {
   const { t } = useTranslation();
   const { data: news } = useSuspenseLatestNews(10);
 
+  const handleViewDetails = (item: any) => {
+    const url = item.uniqueId
+      ? `/logs?uniqueId=${encodeURIComponent(item.uniqueId)}`
+      : `/logs?search=${encodeURIComponent(item.ruleId || item.attackType)}`;
+    window.location.href = url;
+  };
+
+  const tableHeaders = [
+    { key: "timestamp", label: "dashboard.timestamp", width: "w-[140px]" },
+    { key: "attackerIp", label: "dashboard.attackerIp", width: "w-[120px]" },
+    { key: "domain", label: "dashboard.domain", width: "w-[140px]" },
+    { key: "attackType", label: "dashboard.attackType" },
+    { key: "action", label: "dashboard.action" },
+    { key: "actions", label: "dashboard.actions", align: "text-right" },
+  ];
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          {t("dashboard.latestNews")}
-        </CardTitle>
-        <CardDescription>{t("dashboard.latestNewsDesc")}</CardDescription>
-      </CardHeader>
+      <CardHeaderWithIcon
+        icon={TrendingUp}
+        title={t("dashboard.latestNews")}
+        description={t("dashboard.latestNewsDesc")}
+      />
       <CardContent>
         {news && news.length > 0 ? (
           <div className="rounded-md border max-h-[400px] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[140px]">{t("dashboard.timestamp")}</TableHead>
-                  <TableHead className="w-[120px]">{t("dashboard.attackerIp")}</TableHead>
-                  <TableHead className="w-[140px]">{t("dashboard.domain")}</TableHead>
-                  <TableHead>{t("dashboard.attackType")}</TableHead>
-                  <TableHead>{t("dashboard.action")}</TableHead>
-                  <TableHead className="text-right">{t("dashboard.actions")}</TableHead>
+                  {tableHeaders.map(({ key, label, width, align }) => (
+                    <TableHead key={key} className={`${width || ''} ${align || ''}`}>
+                      {t(label)}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -486,20 +452,7 @@ function LatestNewsTable() {
                       <Badge variant="destructive">{item.action}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          // Navigate to logs page with uniqueId for precise log lookup
-                          if (item.uniqueId) {
-                            window.location.href = `/logs?uniqueId=${encodeURIComponent(item.uniqueId)}`;
-                          } else {
-                            // Fallback to search if uniqueId not available
-                            const searchTerm = item.ruleId || item.attackType;
-                            window.location.href = `/logs?search=${encodeURIComponent(searchTerm)}`;
-                          }
-                        }}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => handleViewDetails(item)}>
                         <Eye className="h-4 w-4 mr-1" />
                         {t("dashboard.viewDetails")}
                       </Button>
@@ -510,9 +463,7 @@ function LatestNewsTable() {
             </Table>
           </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            {t("dashboard.noData")}
-          </div>
+          <EmptyState message={t("dashboard.noData")} />
         )}
       </CardContent>
     </Card>
@@ -524,6 +475,8 @@ function RequestAnalyticsCard() {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
   const { data: analytics } = useSuspenseRequestAnalytics(period);
+
+  const periods = ['day', 'week', 'month'] as const;
 
   return (
     <Card>
@@ -541,9 +494,11 @@ function RequestAnalyticsCard() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="day">{t("dashboard.period.day")}</SelectItem>
-              <SelectItem value="week">{t("dashboard.period.week")}</SelectItem>
-              <SelectItem value="month">{t("dashboard.period.month")}</SelectItem>
+              {periods.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {t(`dashboard.period.${p}`)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -587,9 +542,7 @@ function RequestAnalyticsCard() {
             </Table>
           </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            {t("dashboard.noData")}
-          </div>
+          <EmptyState message={t("dashboard.noData")} />
         )}
       </CardContent>
     </Card>
@@ -629,7 +582,7 @@ export default function DashboardNew() {
         <DashboardStatsOverview />
       </Suspense>
 
-      {/* Row 1: Request Trend Chart (Full Width) + Attack Ratio */}
+      {/* Row 1: Request Trend Chart + Attack Ratio */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Suspense
           fallback={
