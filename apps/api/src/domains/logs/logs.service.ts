@@ -1,9 +1,13 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import logger from '../../utils/logger';
 import prisma from '../../config/database';
 import { ParsedLogEntry, LogFilterOptions, LogStatistics } from './logs.types';
 import { parseAccessLogLine, parseErrorLogLine, parseModSecLogLine } from './services/log-parser.service';
+
+const execFileAsync = promisify(execFile);
 
 const NGINX_ACCESS_LOG = '/var/log/nginx/access.log';
 const NGINX_ERROR_LOG = '/var/log/nginx/error.log';
@@ -45,14 +49,8 @@ function isPathSafe(filePath: string): boolean {
 }
 
 /**
- * Safely escape string for shell command (defense in depth)
- */
-function escapeShellArg(arg: string): string {
-  return arg.replace(/[^\w.-]/g, '\\$&');
-}
-
-/**
  * Read last N lines from a file efficiently with security checks
+ * Uses execFile instead of exec to prevent command injection
  */
 async function readLastLines(filePath: string, numLines: number): Promise<string[]> {
   try {
@@ -67,19 +65,14 @@ async function readLastLines(filePath: string, numLines: number): Promise<string
 
     await fs.access(filePath);
 
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const execAsync = promisify(exec);
-
-    // Use absolute path and escape it
-    const safePath = escapeShellArg(filePath);
-    
-    // Set timeout and maxBuffer limits
-    const { stdout } = await execAsync(
-      `tail -n ${safeNumLines} ${safePath} 2>/dev/null || echo ""`,
+    // Use execFile - does NOT use shell, preventing command injection
+    const { stdout } = await execFileAsync(
+      'tail',
+      ['-n', String(safeNumLines), filePath],
       { 
         timeout: 5000, // 5 second timeout
-        maxBuffer: 10 * 1024 * 1024 // 10MB max
+        maxBuffer: 10 * 1024 * 1024, // 10MB max
+        encoding: 'utf8'
       }
     );
     
@@ -90,7 +83,7 @@ async function readLastLines(filePath: string, numLines: number): Promise<string
     } else if (error.killed) {
       logger.warn(`Reading log file timed out: ${filePath}`);
     } else {
-      logger.error(`Error reading log file ${filePath}:`, error);
+      logger.error(`Error reading log file:`, error.message);
     }
     return [];
   }
@@ -98,6 +91,7 @@ async function readLastLines(filePath: string, numLines: number): Promise<string
 
 /**
  * Search logs by uniqueId using grep with security measures
+ * Uses execFile to prevent command injection
  */
 async function searchLogsByUniqueId(uniqueId: string, limit: number = 100): Promise<ParsedLogEntry[]> {
   try {
@@ -107,28 +101,37 @@ async function searchLogsByUniqueId(uniqueId: string, limit: number = 100): Prom
       return [];
     }
 
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const execAsync = promisify(exec);
-    
     const results: ParsedLogEntry[] = [];
     const maxBuffer = 10 * 1024 * 1024; // 10MB buffer
     const timeout = 10000; // 10 seconds
     
-    // Escape uniqueId for shell
-    const safeUniqueId = escapeShellArg(uniqueId);
-    const searchPattern = `unique_id "${safeUniqueId}"`;
+    // Search pattern for uniqueId
+    const searchPattern = `unique_id "${uniqueId}"`;
     
     // Search in main nginx error log
     if (isPathSafe(NGINX_ERROR_LOG)) {
       try {
-        const { stdout } = await execAsync(
-          `grep -F '${searchPattern}' ${escapeShellArg(NGINX_ERROR_LOG)} 2>/dev/null | head -n ${limit} || echo ""`,
-          { maxBuffer, timeout }
+        // Use grep with execFile - arguments are passed as array, preventing injection
+        const grepResult = await execFileAsync(
+          'grep',
+          ['-F', searchPattern, NGINX_ERROR_LOG],
+          { maxBuffer, timeout, encoding: 'utf8' }
         );
         
-        if (stdout.trim()) {
-          const lines = stdout.trim().split('\n');
+        if (grepResult.stdout.trim()) {
+          // Limit results with head
+          const headResult = await execFileAsync(
+            'head',
+            ['-n', String(limit)],
+            { 
+              input: grepResult.stdout,
+              maxBuffer, 
+              timeout,
+              encoding: 'utf8'
+            }
+          );
+          
+          const lines = headResult.stdout.trim().split('\n');
           lines.forEach((line: string, index: number) => {
             const parsed = parseModSecLogLine(line, index);
             if (parsed) {
@@ -137,7 +140,8 @@ async function searchLogsByUniqueId(uniqueId: string, limit: number = 100): Prom
           });
         }
       } catch (error: any) {
-        if (!error.killed) {
+        // grep returns exit code 1 if no matches found, which is normal
+        if (error.code !== 1 && !error.killed) {
           logger.debug('Could not search main error log:', error.message);
         }
       }
@@ -159,13 +163,25 @@ async function searchLogsByUniqueId(uniqueId: string, limit: number = 100): Prom
 
           for (const { path: logPath, domain } of logsToSearch) {
             try {
-              const { stdout } = await execAsync(
-                `grep -F '${searchPattern}' ${escapeShellArg(logPath)} 2>/dev/null | head -n ${limit} || echo ""`,
-                { maxBuffer, timeout }
+              const grepResult = await execFileAsync(
+                'grep',
+                ['-F', searchPattern, logPath],
+                { maxBuffer, timeout, encoding: 'utf8' }
               );
               
-              if (stdout.trim()) {
-                const lines = stdout.trim().split('\n');
+              if (grepResult.stdout.trim()) {
+                const headResult = await execFileAsync(
+                  'head',
+                  ['-n', String(limit)],
+                  { 
+                    input: grepResult.stdout,
+                    maxBuffer, 
+                    timeout,
+                    encoding: 'utf8'
+                  }
+                );
+                
+                const lines = headResult.stdout.trim().split('\n');
                 lines.forEach((line: string, index: number) => {
                   const parsed = parseModSecLogLine(line, index);
                   if (parsed) {
@@ -175,8 +191,8 @@ async function searchLogsByUniqueId(uniqueId: string, limit: number = 100): Prom
                 });
               }
             } catch (error: any) {
-              // Silently skip files that can't be read
-              if (!error.killed) {
+              // Silently skip files that can't be read (grep exit code 1 is normal)
+              if (error.code !== 1 && !error.killed) {
                 logger.debug(`Could not search ${logPath}:`, error.message);
               }
             }
