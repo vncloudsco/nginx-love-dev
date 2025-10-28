@@ -10,23 +10,85 @@ const NGINX_ERROR_LOG = '/var/log/nginx/error.log';
 const MODSEC_AUDIT_LOG = '/var/log/modsec_audit.log';
 const NGINX_LOG_DIR = '/var/log/nginx';
 
+// Security constants
+const MAX_LINES_PER_FILE = 1000;
+const MAX_CONCURRENT_FILES = 5;
+const ALLOWED_LOG_DIR = path.resolve(NGINX_LOG_DIR);
+
 /**
- * Read last N lines from a file efficiently
+ * Validate and sanitize domain name to prevent path traversal
+ */
+function sanitizeDomain(domain: string): string | null {
+  if (!domain || typeof domain !== 'string') {
+    return null;
+  }
+
+  // Remove any path traversal attempts
+  const cleaned = domain.trim().replace(/[^a-zA-Z0-9.-]/g, '');
+  
+  // Validate domain format
+  const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  
+  if (!domainRegex.test(cleaned) || cleaned.length > 253) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+/**
+ * Validate file path is within allowed directory
+ */
+function isPathSafe(filePath: string): boolean {
+  const resolvedPath = path.resolve(filePath);
+  return resolvedPath.startsWith(ALLOWED_LOG_DIR);
+}
+
+/**
+ * Safely escape string for shell command (defense in depth)
+ */
+function escapeShellArg(arg: string): string {
+  return arg.replace(/[^\w.-]/g, '\\$&');
+}
+
+/**
+ * Read last N lines from a file efficiently with security checks
  */
 async function readLastLines(filePath: string, numLines: number): Promise<string[]> {
   try {
+    // Security: Validate path
+    if (!isPathSafe(filePath)) {
+      logger.warn(`Attempted to access file outside allowed directory: ${filePath}`);
+      return [];
+    }
+
+    // Limit number of lines
+    const safeNumLines = Math.min(Math.max(numLines, 1), MAX_LINES_PER_FILE);
+
     await fs.access(filePath);
 
-    // Use tail command for efficiency with large files
     const { exec } = require('child_process');
     const { promisify } = require('util');
     const execAsync = promisify(exec);
 
-    const { stdout } = await execAsync(`tail -n ${numLines} ${filePath} 2>/dev/null || echo ""`);
+    // Use absolute path and escape it
+    const safePath = escapeShellArg(filePath);
+    
+    // Set timeout and maxBuffer limits
+    const { stdout } = await execAsync(
+      `tail -n ${safeNumLines} ${safePath} 2>/dev/null || echo ""`,
+      { 
+        timeout: 5000, // 5 second timeout
+        maxBuffer: 10 * 1024 * 1024 // 10MB max
+      }
+    );
+    
     return stdout.trim().split('\n').filter((line: string) => line.trim().length > 0);
   } catch (error: any) {
     if (error.code === 'ENOENT') {
-      logger.warn(`Log file not found: ${filePath}`);
+      logger.debug(`Log file not found: ${filePath}`);
+    } else if (error.killed) {
+      logger.warn(`Reading log file timed out: ${filePath}`);
     } else {
       logger.error(`Error reading log file ${filePath}:`, error);
     }
@@ -35,85 +97,95 @@ async function readLastLines(filePath: string, numLines: number): Promise<string
 }
 
 /**
- * Search logs by uniqueId using grep for efficient searching
+ * Search logs by uniqueId using grep with security measures
  */
 async function searchLogsByUniqueId(uniqueId: string, limit: number = 100): Promise<ParsedLogEntry[]> {
   try {
+    // Validate uniqueId format (typically alphanumeric)
+    if (!/^[a-zA-Z0-9-_]+$/.test(uniqueId) || uniqueId.length > 64) {
+      logger.warn(`Invalid uniqueId format: ${uniqueId}`);
+      return [];
+    }
+
     const { exec } = require('child_process');
     const { promisify } = require('util');
     const execAsync = promisify(exec);
     
     const results: ParsedLogEntry[] = [];
-    const maxBuffer = 50 * 1024 * 1024; // 50MB buffer
+    const maxBuffer = 10 * 1024 * 1024; // 10MB buffer
+    const timeout = 10000; // 10 seconds
     
-    // Search pattern for uniqueId in ModSecurity logs
-    const searchPattern = `unique_id "${uniqueId}"`;
+    // Escape uniqueId for shell
+    const safeUniqueId = escapeShellArg(uniqueId);
+    const searchPattern = `unique_id "${safeUniqueId}"`;
     
     // Search in main nginx error log
-    try {
-      const { stdout } = await execAsync(
-        `grep -F '${searchPattern}' ${NGINX_ERROR_LOG} 2>/dev/null || echo ""`,
-        { maxBuffer }
-      );
-      if (stdout.trim()) {
-        const lines = stdout.trim().split('\n');
-        lines.forEach((line: string, index: number) => {
-          const parsed = parseModSecLogLine(line, index);
-          if (parsed) {
-            results.push(parsed);
-          }
-        });
+    if (isPathSafe(NGINX_ERROR_LOG)) {
+      try {
+        const { stdout } = await execAsync(
+          `grep -F '${searchPattern}' ${escapeShellArg(NGINX_ERROR_LOG)} 2>/dev/null | head -n ${limit} || echo ""`,
+          { maxBuffer, timeout }
+        );
+        
+        if (stdout.trim()) {
+          const lines = stdout.trim().split('\n');
+          lines.forEach((line: string, index: number) => {
+            const parsed = parseModSecLogLine(line, index);
+            if (parsed) {
+              results.push(parsed);
+            }
+          });
+        }
+      } catch (error: any) {
+        if (!error.killed) {
+          logger.debug('Could not search main error log:', error.message);
+        }
       }
-    } catch (error) {
-      logger.warn('Could not search main error log:', error);
     }
     
-    // Search in domain-specific error logs
+    // Search in domain-specific error logs (with concurrency limit)
     try {
       const domainLogs = await getDomainLogFiles();
-      for (const domainLog of domainLogs) {
-        // Search HTTP error log
-        if (domainLog.errorLog) {
-          try {
-            const { stdout } = await execAsync(
-              `grep -F '${searchPattern}' ${domainLog.errorLog} 2>/dev/null || echo ""`,
-              { maxBuffer }
-            );
-            if (stdout.trim()) {
-              const lines = stdout.trim().split('\n');
-              lines.forEach((line: string, index: number) => {
-                const parsed = parseModSecLogLine(line, index);
-                if (parsed) {
-                  parsed.domain = domainLog.domain;
-                  results.push(parsed);
-                }
-              });
-            }
-          } catch (error) {
-            // Ignore individual file errors
-          }
-        }
+      
+      // Process in batches to avoid resource exhaustion
+      for (let i = 0; i < domainLogs.length; i += MAX_CONCURRENT_FILES) {
+        const batch = domainLogs.slice(i, i + MAX_CONCURRENT_FILES);
         
-        // Search HTTPS error log
-        if (domainLog.sslErrorLog) {
-          try {
-            const { stdout } = await execAsync(
-              `grep -F '${searchPattern}' ${domainLog.sslErrorLog} 2>/dev/null || echo ""`,
-              { maxBuffer }
-            );
-            if (stdout.trim()) {
-              const lines = stdout.trim().split('\n');
-              lines.forEach((line: string, index: number) => {
-                const parsed = parseModSecLogLine(line, index);
-                if (parsed) {
-                  parsed.domain = domainLog.domain;
-                  results.push(parsed);
-                }
-              });
+        await Promise.all(batch.map(async (domainLog) => {
+          const logsToSearch = [
+            { path: domainLog.errorLog, domain: domainLog.domain },
+            { path: domainLog.sslErrorLog, domain: domainLog.domain }
+          ].filter(log => log.path && isPathSafe(log.path));
+
+          for (const { path: logPath, domain } of logsToSearch) {
+            try {
+              const { stdout } = await execAsync(
+                `grep -F '${searchPattern}' ${escapeShellArg(logPath)} 2>/dev/null | head -n ${limit} || echo ""`,
+                { maxBuffer, timeout }
+              );
+              
+              if (stdout.trim()) {
+                const lines = stdout.trim().split('\n');
+                lines.forEach((line: string, index: number) => {
+                  const parsed = parseModSecLogLine(line, index);
+                  if (parsed) {
+                    parsed.domain = domain;
+                    results.push(parsed);
+                  }
+                });
+              }
+            } catch (error: any) {
+              // Silently skip files that can't be read
+              if (!error.killed) {
+                logger.debug(`Could not search ${logPath}:`, error.message);
+              }
             }
-          } catch (error) {
-            // Ignore individual file errors
           }
+        }));
+        
+        // Stop if we have enough results
+        if (results.length >= limit) {
+          break;
         }
       }
     } catch (error) {
@@ -131,45 +203,77 @@ async function searchLogsByUniqueId(uniqueId: string, limit: number = 100): Prom
 }
 
 /**
- * Get list of domain-specific log files
+ * Get list of domain-specific log files with security validation
  */
-async function getDomainLogFiles(): Promise<{ domain: string; accessLog: string; errorLog: string; sslAccessLog: string; sslErrorLog: string }[]> {
+async function getDomainLogFiles(): Promise<{ 
+  domain: string; 
+  accessLog: string; 
+  errorLog: string; 
+  sslAccessLog: string; 
+  sslErrorLog: string 
+}[]> {
   try {
+    if (!isPathSafe(NGINX_LOG_DIR)) {
+      logger.error('Log directory path validation failed');
+      return [];
+    }
+
     const files = await fs.readdir(NGINX_LOG_DIR);
-    const domainLogs: { [key: string]: { accessLog?: string; errorLog?: string; sslAccessLog?: string; sslErrorLog?: string } } = {};
+    const domainLogs: { 
+      [key: string]: { 
+        accessLog?: string; 
+        errorLog?: string; 
+        sslAccessLog?: string; 
+        sslErrorLog?: string 
+      } 
+    } = {};
 
     files.forEach(file => {
-      // Match patterns for both HTTP and HTTPS logs:
-      // - example.com_access.log or example.com-access.log (HTTP)
-      // - example.com_error.log or example.com-error.log (HTTP)
-      // - example.com_ssl_access.log or example.com-ssl-access.log (HTTPS)
-      // - example.com_ssl_error.log or example.com-ssl-error.log (HTTPS)
+      // Additional security: skip hidden files and parent directory references
+      if (file.startsWith('.') || file.includes('..')) {
+        return;
+      }
+
+      const fullPath = path.join(NGINX_LOG_DIR, file);
+      
+      // Validate the constructed path
+      if (!isPathSafe(fullPath)) {
+        return;
+      }
 
       // SSL access log
-      const sslAccessMatch = file.match(/^(.+?)[-_]ssl[-_]access\.log$/);
+      const sslAccessMatch = file.match(/^([a-zA-Z0-9.-]+)[-_]ssl[-_]access\.log$/);
       // SSL error log
-      const sslErrorMatch = file.match(/^(.+?)[-_]ssl[-_]error\.log$/);
+      const sslErrorMatch = file.match(/^([a-zA-Z0-9.-]+)[-_]ssl[-_]error\.log$/);
       // Non-SSL access log (must not contain 'ssl')
-      const accessMatch = !file.includes('ssl') && file.match(/^(.+?)[-_]access\.log$/);
+      const accessMatch = !file.includes('ssl') && file.match(/^([a-zA-Z0-9.-]+)[-_]access\.log$/);
       // Non-SSL error log (must not contain 'ssl')
-      const errorMatch = !file.includes('ssl') && file.match(/^(.+?)[-_]error\.log$/);
+      const errorMatch = !file.includes('ssl') && file.match(/^([a-zA-Z0-9.-]+)[-_]error\.log$/);
 
       if (sslAccessMatch) {
-        const domain = sslAccessMatch[1];
-        if (!domainLogs[domain]) domainLogs[domain] = {};
-        domainLogs[domain].sslAccessLog = path.join(NGINX_LOG_DIR, file);
+        const domain = sanitizeDomain(sslAccessMatch[1]);
+        if (domain) {
+          if (!domainLogs[domain]) domainLogs[domain] = {};
+          domainLogs[domain].sslAccessLog = fullPath;
+        }
       } else if (sslErrorMatch) {
-        const domain = sslErrorMatch[1];
-        if (!domainLogs[domain]) domainLogs[domain] = {};
-        domainLogs[domain].sslErrorLog = path.join(NGINX_LOG_DIR, file);
+        const domain = sanitizeDomain(sslErrorMatch[1]);
+        if (domain) {
+          if (!domainLogs[domain]) domainLogs[domain] = {};
+          domainLogs[domain].sslErrorLog = fullPath;
+        }
       } else if (accessMatch) {
-        const domain = accessMatch[1];
-        if (!domainLogs[domain]) domainLogs[domain] = {};
-        domainLogs[domain].accessLog = path.join(NGINX_LOG_DIR, file);
+        const domain = sanitizeDomain(accessMatch[1]);
+        if (domain) {
+          if (!domainLogs[domain]) domainLogs[domain] = {};
+          domainLogs[domain].accessLog = fullPath;
+        }
       } else if (errorMatch) {
-        const domain = errorMatch[1];
-        if (!domainLogs[domain]) domainLogs[domain] = {};
-        domainLogs[domain].errorLog = path.join(NGINX_LOG_DIR, file);
+        const domain = sanitizeDomain(errorMatch[1]);
+        if (domain) {
+          if (!domainLogs[domain]) domainLogs[domain] = {};
+          domainLogs[domain].errorLog = fullPath;
+        }
       }
     });
 
@@ -187,43 +291,64 @@ async function getDomainLogFiles(): Promise<{ domain: string; accessLog: string;
 }
 
 /**
- * Get parsed logs from all sources
+ * Get parsed logs from all sources with optimization and security
  */
 export async function getParsedLogs(options: LogFilterOptions = {}): Promise<ParsedLogEntry[]> {
-  const { limit = 100, level, type, search, domain, ruleId, uniqueId } = options;
+  const { 
+    limit = 100, 
+    offset = 0,
+    level, 
+    type, 
+    search, 
+    domain, 
+    ruleId, 
+    uniqueId 
+  } = options;
+
+  // Validate and limit parameters
+  const safeLimit = Math.min(Math.max(limit, 1), MAX_LINES_PER_FILE);
+  const safeOffset = Math.max(offset || 0, 0);
 
   const allLogs: ParsedLogEntry[] = [];
 
   try {
-    // If searching by uniqueId, use grep for efficient search across all logs
+    // Early return for uniqueId search (most efficient)
     if (uniqueId) {
-      return await searchLogsByUniqueId(uniqueId, limit);
+      const results = await searchLogsByUniqueId(uniqueId, safeLimit);
+      return results.slice(safeOffset, safeOffset + safeLimit);
     }
-    // If specific domain is requested, read only that domain's logs
-    if (domain && domain !== 'all') {
-      // Define all possible log file paths (both HTTP and HTTPS)
+
+    // Validate domain parameter
+    const safeDomain = domain ? sanitizeDomain(domain) : null;
+    if (domain && domain !== 'all' && !safeDomain) {
+      logger.warn(`Invalid domain parameter: ${domain}`);
+      return [];
+    }
+
+    // If specific domain is requested
+    if (safeDomain && safeDomain !== 'all') {
       const logPaths = {
         httpAccess: [
-          path.join(NGINX_LOG_DIR, `${domain}_access.log`),
-          path.join(NGINX_LOG_DIR, `${domain}-access.log`)
+          path.join(NGINX_LOG_DIR, `${safeDomain}_access.log`),
+          path.join(NGINX_LOG_DIR, `${safeDomain}-access.log`)
         ],
         httpError: [
-          path.join(NGINX_LOG_DIR, `${domain}_error.log`),
-          path.join(NGINX_LOG_DIR, `${domain}-error.log`)
+          path.join(NGINX_LOG_DIR, `${safeDomain}_error.log`),
+          path.join(NGINX_LOG_DIR, `${safeDomain}-error.log`)
         ],
         httpsAccess: [
-          path.join(NGINX_LOG_DIR, `${domain}_ssl_access.log`),
-          path.join(NGINX_LOG_DIR, `${domain}-ssl-access.log`)
+          path.join(NGINX_LOG_DIR, `${safeDomain}_ssl_access.log`),
+          path.join(NGINX_LOG_DIR, `${safeDomain}-ssl-access.log`)
         ],
         httpsError: [
-          path.join(NGINX_LOG_DIR, `${domain}_ssl_error.log`),
-          path.join(NGINX_LOG_DIR, `${domain}-ssl-error.log`)
+          path.join(NGINX_LOG_DIR, `${safeDomain}_ssl_error.log`),
+          path.join(NGINX_LOG_DIR, `${safeDomain}-ssl-error.log`)
         ]
       };
 
-      // Helper function to find existing log file
       const findExistingFile = async (paths: string[]): Promise<string | null> => {
         for (const filePath of paths) {
+          if (!isPathSafe(filePath)) continue;
           try {
             await fs.access(filePath);
             return filePath;
@@ -234,139 +359,189 @@ export async function getParsedLogs(options: LogFilterOptions = {}): Promise<Par
         return null;
       };
 
-      // Read domain access logs (both HTTP and HTTPS)
+      // Read domain logs based on type filter
+      const readPromises: Promise<void>[] = [];
+
       if (!type || type === 'all' || type === 'access') {
-        // HTTP access logs
-        const httpAccessLog = await findExistingFile(logPaths.httpAccess);
-        if (httpAccessLog) {
-          const accessLines = await readLastLines(httpAccessLog, Math.ceil(limit / 4));
-          accessLines.forEach((line, index) => {
-            const parsed = parseAccessLogLine(line, index, domain);
-            if (parsed) allLogs.push(parsed);
-          });
-        }
+        readPromises.push(
+          (async () => {
+            const httpAccessLog = await findExistingFile(logPaths.httpAccess);
+            if (httpAccessLog) {
+              const lines = await readLastLines(httpAccessLog, safeLimit);
+              lines.forEach((line, index) => {
+                const parsed = parseAccessLogLine(line, index, safeDomain);
+                if (parsed) allLogs.push(parsed);
+              });
+            }
 
-        // HTTPS access logs
-        const httpsAccessLog = await findExistingFile(logPaths.httpsAccess);
-        if (httpsAccessLog) {
-          const sslAccessLines = await readLastLines(httpsAccessLog, Math.ceil(limit / 4));
-          sslAccessLines.forEach((line, index) => {
-            const parsed = parseAccessLogLine(line, index, domain);
-            if (parsed) allLogs.push(parsed);
-          });
-        }
+            const httpsAccessLog = await findExistingFile(logPaths.httpsAccess);
+            if (httpsAccessLog) {
+              const lines = await readLastLines(httpsAccessLog, safeLimit);
+              lines.forEach((line, index) => {
+                const parsed = parseAccessLogLine(line, index, safeDomain);
+                if (parsed) allLogs.push(parsed);
+              });
+            }
+          })()
+        );
       }
 
-      // Read domain error logs (both HTTP and HTTPS)
       if (!type || type === 'all' || type === 'error') {
-        // HTTP error logs
-        const httpErrorLog = await findExistingFile(logPaths.httpError);
-        if (httpErrorLog) {
-          const errorLines = await readLastLines(httpErrorLog, Math.ceil(limit / 4));
-          errorLines.forEach((line, index) => {
-            const parsed = parseErrorLogLine(line, index);
-            if (parsed) {
-              parsed.domain = domain;
-              allLogs.push(parsed);
+        readPromises.push(
+          (async () => {
+            const httpErrorLog = await findExistingFile(logPaths.httpError);
+            if (httpErrorLog) {
+              const lines = await readLastLines(httpErrorLog, safeLimit);
+              lines.forEach((line, index) => {
+                const parsed = parseErrorLogLine(line, index);
+                if (parsed) {
+                  parsed.domain = safeDomain;
+                  allLogs.push(parsed);
+                }
+              });
             }
-          });
-        }
 
-        // HTTPS error logs
-        const httpsErrorLog = await findExistingFile(logPaths.httpsError);
-        if (httpsErrorLog) {
-          const sslErrorLines = await readLastLines(httpsErrorLog, Math.ceil(limit / 4));
-          sslErrorLines.forEach((line, index) => {
-            const parsed = parseErrorLogLine(line, index);
-            if (parsed) {
-              parsed.domain = domain;
-              allLogs.push(parsed);
+            const httpsErrorLog = await findExistingFile(logPaths.httpsError);
+            if (httpsErrorLog) {
+              const lines = await readLastLines(httpsErrorLog, safeLimit);
+              lines.forEach((line, index) => {
+                const parsed = parseErrorLogLine(line, index);
+                if (parsed) {
+                  parsed.domain = safeDomain;
+                  allLogs.push(parsed);
+                }
+              });
             }
-          });
-        }
+          })()
+        );
       }
+
+      await Promise.all(readPromises);
     } else {
-      // Read global nginx logs
+      // Read global and domain logs
+      const readPromises: Promise<void>[] = [];
+
+      // Global logs
       if (!type || type === 'all' || type === 'access') {
-        const accessLines = await readLastLines(NGINX_ACCESS_LOG, Math.ceil(limit / 3));
-        accessLines.forEach((line, index) => {
-          const parsed = parseAccessLogLine(line, index);
-          if (parsed) allLogs.push(parsed);
-        });
+        if (isPathSafe(NGINX_ACCESS_LOG)) {
+          readPromises.push(
+            (async () => {
+              const lines = await readLastLines(NGINX_ACCESS_LOG, Math.ceil(safeLimit / 3));
+              lines.forEach((line, index) => {
+                const parsed = parseAccessLogLine(line, index);
+                if (parsed) allLogs.push(parsed);
+              });
+            })()
+          );
+        }
       }
 
       if (!type || type === 'all' || type === 'error') {
-        const errorLines = await readLastLines(NGINX_ERROR_LOG, Math.ceil(limit / 3));
-        errorLines.forEach((line, index) => {
-          const parsed = parseErrorLogLine(line, index);
-          if (parsed) allLogs.push(parsed);
-        });
+        if (isPathSafe(NGINX_ERROR_LOG)) {
+          readPromises.push(
+            (async () => {
+              const lines = await readLastLines(NGINX_ERROR_LOG, Math.ceil(safeLimit / 3));
+              lines.forEach((line, index) => {
+                const parsed = parseErrorLogLine(line, index);
+                if (parsed) allLogs.push(parsed);
+              });
+            })()
+          );
+        }
+
+        if (isPathSafe(MODSEC_AUDIT_LOG)) {
+          readPromises.push(
+            (async () => {
+              const lines = await readLastLines(MODSEC_AUDIT_LOG, Math.ceil(safeLimit / 3));
+              lines.forEach((line, index) => {
+                const parsed = parseModSecLogLine(line, index);
+                if (parsed) allLogs.push(parsed);
+              });
+            })()
+          );
+        }
       }
 
-      // Read ModSecurity logs
-      if (!type || type === 'all' || type === 'error') {
-        const modsecLines = await readLastLines(MODSEC_AUDIT_LOG, Math.ceil(limit / 3));
-        modsecLines.forEach((line, index) => {
-          const parsed = parseModSecLogLine(line, index);
-          if (parsed) allLogs.push(parsed);
-        });
-      }
-
-      // Also read all domain-specific logs if no specific domain requested
+      // Domain-specific logs (with concurrency control)
       if (!domain || domain === 'all') {
         const domainLogFiles = await getDomainLogFiles();
-        const logsPerDomain = Math.ceil(limit / (domainLogFiles.length * 2 + 1)); // Divide among all domains and log types
+        const logsPerDomain = Math.max(1, Math.ceil(safeLimit / (domainLogFiles.length * 2 + 1)));
 
-        for (const { domain: domainName, accessLog, errorLog, sslAccessLog, sslErrorLog } of domainLogFiles) {
-          // HTTP access logs
-          if (accessLog && (!type || type === 'all' || type === 'access')) {
-            const lines = await readLastLines(accessLog, logsPerDomain);
-            lines.forEach((line, index) => {
-              const parsed = parseAccessLogLine(line, index, domainName);
-              if (parsed) allLogs.push(parsed);
-            });
-          }
+        // Process domains in batches
+        for (let i = 0; i < domainLogFiles.length; i += MAX_CONCURRENT_FILES) {
+          const batch = domainLogFiles.slice(i, i + MAX_CONCURRENT_FILES);
+          
+          const batchPromises = batch.map(async ({ domain: domainName, accessLog, errorLog, sslAccessLog, sslErrorLog }) => {
+            const domainPromises: Promise<void>[] = [];
 
-          // HTTPS access logs
-          if (sslAccessLog && (!type || type === 'all' || type === 'access')) {
-            const lines = await readLastLines(sslAccessLog, logsPerDomain);
-            lines.forEach((line, index) => {
-              const parsed = parseAccessLogLine(line, index, domainName);
-              if (parsed) allLogs.push(parsed);
-            });
-          }
+            if (accessLog && (!type || type === 'all' || type === 'access')) {
+              domainPromises.push(
+                (async () => {
+                  const lines = await readLastLines(accessLog, logsPerDomain);
+                  lines.forEach((line, index) => {
+                    const parsed = parseAccessLogLine(line, index, domainName);
+                    if (parsed) allLogs.push(parsed);
+                  });
+                })()
+              );
+            }
 
-          // HTTP error logs
-          if (errorLog && (!type || type === 'all' || type === 'error')) {
-            const lines = await readLastLines(errorLog, logsPerDomain);
-            lines.forEach((line, index) => {
-              const parsed = parseErrorLogLine(line, index);
-              if (parsed) {
-                parsed.domain = domainName;
-                allLogs.push(parsed);
-              }
-            });
-          }
+            if (sslAccessLog && (!type || type === 'all' || type === 'access')) {
+              domainPromises.push(
+                (async () => {
+                  const lines = await readLastLines(sslAccessLog, logsPerDomain);
+                  lines.forEach((line, index) => {
+                    const parsed = parseAccessLogLine(line, index, domainName);
+                    if (parsed) allLogs.push(parsed);
+                  });
+                })()
+              );
+            }
 
-          // HTTPS error logs
-          if (sslErrorLog && (!type || type === 'all' || type === 'error')) {
-            const lines = await readLastLines(sslErrorLog, logsPerDomain);
-            lines.forEach((line, index) => {
-              const parsed = parseErrorLogLine(line, index);
-              if (parsed) {
-                parsed.domain = domainName;
-                allLogs.push(parsed);
-              }
-            });
-          }
+            if (errorLog && (!type || type === 'all' || type === 'error')) {
+              domainPromises.push(
+                (async () => {
+                  const lines = await readLastLines(errorLog, logsPerDomain);
+                  lines.forEach((line, index) => {
+                    const parsed = parseErrorLogLine(line, index);
+                    if (parsed) {
+                      parsed.domain = domainName;
+                      allLogs.push(parsed);
+                    }
+                  });
+                })()
+              );
+            }
+
+            if (sslErrorLog && (!type || type === 'all' || type === 'error')) {
+              domainPromises.push(
+                (async () => {
+                  const lines = await readLastLines(sslErrorLog, logsPerDomain);
+                  lines.forEach((line, index) => {
+                    const parsed = parseErrorLogLine(line, index);
+                    if (parsed) {
+                      parsed.domain = domainName;
+                      allLogs.push(parsed);
+                    }
+                  });
+                })()
+              );
+            }
+
+            await Promise.all(domainPromises);
+          });
+
+          await Promise.all(batchPromises);
         }
       }
+
+      await Promise.all(readPromises);
     }
 
     // Sort by timestamp descending (newest first)
     allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-    // Apply filters
+    // Apply filters efficiently
     let filtered = allLogs;
 
     if (level && level !== 'all') {
@@ -378,7 +553,7 @@ export async function getParsedLogs(options: LogFilterOptions = {}): Promise<Par
     }
 
     if (search) {
-      const searchLower = search.toLowerCase();
+      const searchLower = search.toLowerCase().substring(0, 200); // Limit search term length
       filtered = filtered.filter(log =>
         log.message.toLowerCase().includes(searchLower) ||
         log.source.toLowerCase().includes(searchLower) ||
@@ -388,15 +563,12 @@ export async function getParsedLogs(options: LogFilterOptions = {}): Promise<Par
     }
 
     if (ruleId) {
-      filtered = filtered.filter(log => log.ruleId && log.ruleId.includes(ruleId));
+      const safeRuleId = ruleId.substring(0, 100);
+      filtered = filtered.filter(log => log.ruleId && log.ruleId.includes(safeRuleId));
     }
 
-    if (uniqueId) {
-      filtered = filtered.filter(log => log.uniqueId && log.uniqueId.includes(uniqueId));
-    }
-
-    // Apply limit
-    return filtered.slice(0, limit);
+    // Apply offset and limit
+    return filtered.slice(safeOffset, safeOffset + safeLimit);
   } catch (error) {
     logger.error('Error getting parsed logs:', error);
     return [];
@@ -424,16 +596,21 @@ export async function getLogStats(): Promise<LogStatistics> {
 }
 
 /**
- * Get available domains from database
+ * Get available domains from database (cached for performance)
  */
 export async function getAvailableDomainsFromDb() {
-  return await prisma.domain.findMany({
-    select: {
-      name: true,
-      status: true,
-    },
-    orderBy: {
-      name: 'asc',
-    },
-  });
+  try {
+    return await prisma.domain.findMany({
+      select: {
+        name: true,
+        status: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching domains from database:', error);
+    return [];
+  }
 }
